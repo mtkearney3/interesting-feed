@@ -24,3 +24,28 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+@keyframes capture-ai-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.capture-ai-enter {
+  animation: capture-ai-enter 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .capture-ai-enter {
+    animation: none;
+  }
+
+  .capture-thinking-dots > span:first-child {
+    display: none;
+  }
+}
