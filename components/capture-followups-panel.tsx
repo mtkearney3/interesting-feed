@@ -22,7 +22,7 @@ function AnswerBlock({
 }) {
   return (
     <div
-      className={`mt-2 border-l-2 border-zinc-300 pl-3 text-sm leading-relaxed text-zinc-700 dark:border-zinc-600 dark:text-zinc-300 ${subtle ? "italic text-zinc-500 dark:text-zinc-400" : ""}`}
+      className={`mt-2 border-l-[3px] border-sky-400/70 pl-3 text-sm leading-relaxed text-zinc-700 dark:border-sky-500/50 dark:text-zinc-300 ${subtle ? "italic text-zinc-500 dark:text-zinc-400" : ""}`}
     >
       {children}
     </div>
@@ -126,7 +126,7 @@ export function CaptureFollowupsPanel({
     <div className="mt-4 space-y-4 border-t border-zinc-100 pt-4 dark:border-zinc-800">
       {presetQuestions.length > 0 ? (
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+          <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
             Follow-up questions
           </p>
           <ul className="mt-2 space-y-2">
@@ -138,7 +138,7 @@ export function CaptureFollowupsPanel({
                   <button
                     type="button"
                     onClick={() => void onPresetClick(index, question)}
-                    className="w-full text-left font-normal text-blue-700 underline decoration-blue-700/40 underline-offset-2 hover:decoration-blue-700 dark:text-blue-400 dark:decoration-blue-400/40 dark:hover:decoration-blue-400"
+                    className="w-full rounded-lg border border-zinc-200/90 bg-zinc-50/90 px-3 py-2.5 text-left text-sm font-normal leading-snug text-sky-800 transition-colors hover:border-sky-300/80 hover:bg-sky-50/80 dark:border-zinc-700 dark:bg-zinc-800/60 dark:text-sky-200 dark:hover:border-sky-700/50 dark:hover:bg-sky-950/40"
                   >
                     {question}
                   </button>
@@ -165,21 +165,21 @@ export function CaptureFollowupsPanel({
       ) : null}
 
       <div className="space-y-2">
-        <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+        <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
           Your question
         </p>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+        <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-stretch">
           <input
             type="text"
             value={customText}
             onChange={(e) => setCustomText(e.target.value)}
             placeholder="Ask your own follow-up…"
-            className="min-w-0 flex-1 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-foreground shadow-sm outline-none ring-zinc-400 focus:border-zinc-300 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-900 dark:focus:border-zinc-600"
+            className="min-h-[44px] w-full min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-sm text-zinc-900 shadow-sm outline-none ring-sky-500/20 placeholder:text-zinc-500 focus:border-sky-400 focus:ring-2 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-sky-600"
           />
           <button
             type="button"
             onClick={() => void onCustomAsk()}
-            className="shrink-0 rounded-md border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+            className="min-h-[44px] w-full shrink-0 rounded-lg border border-sky-200 bg-sky-50 px-4 py-2.5 text-sm font-semibold text-sky-900 hover:bg-sky-100 dark:border-sky-900/40 dark:bg-sky-950/50 dark:text-sky-100 dark:hover:bg-sky-950/80 sm:w-auto sm:min-h-0 sm:px-5"
           >
             Ask
           </button>

@@ -31,7 +31,7 @@ export function CaptureCardLead(props: LeadFields) {
     <div>
       {thinking ? (
         <div
-          className="mb-3 flex items-center gap-2 text-xs font-medium tracking-wide text-zinc-500 dark:text-zinc-400"
+          className="mb-2 flex items-center gap-2 text-xs font-medium tracking-wide text-zinc-500 dark:text-zinc-400"
           role="status"
           aria-live="polite"
         >
@@ -44,34 +44,34 @@ export function CaptureCardLead(props: LeadFields) {
       ) : null}
 
       {hasAi ? (
-        <div className="capture-ai-enter space-y-3">
-          <h2 className="text-lg font-semibold leading-snug text-foreground">
+        <div className="capture-ai-enter space-y-2.5 sm:space-y-3">
+          <h2 className="text-xl font-bold leading-snug tracking-tight text-zinc-900 dark:text-zinc-50 sm:text-2xl">
             {props.ai_title}
           </h2>
-          <p className="text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">
+          <p className="text-[15px] leading-relaxed text-zinc-700 dark:text-zinc-300 sm:text-base">
             {props.ai_summary}
           </p>
           <p className="text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
-            <span className="font-medium text-zinc-500 dark:text-zinc-500">
+            <span className="font-semibold text-zinc-500 dark:text-zinc-500">
               Why it&apos;s interesting:{" "}
             </span>
             {props.ai_why_interesting}
           </p>
           <div className="flex flex-wrap items-center gap-2 text-xs">
             {props.ai_category ? (
-              <span className="rounded-full bg-violet-100 px-2 py-0.5 font-medium text-violet-900 dark:bg-violet-950 dark:text-violet-200">
+              <span className="rounded-full bg-violet-100 px-2.5 py-0.5 font-semibold text-violet-900 dark:bg-violet-950 dark:text-violet-200">
                 {props.ai_category}
               </span>
             ) : null}
             {scoreLabel(props.ai_insight_score) ? (
-              <span className="rounded-full bg-amber-100 px-2 py-0.5 font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+              <span className="rounded-full bg-amber-100 px-2.5 py-0.5 font-semibold text-amber-900 dark:bg-amber-950 dark:text-amber-200">
                 Insight {scoreLabel(props.ai_insight_score)}
               </span>
             ) : null}
           </div>
           {props.ai_related_notes?.trim() ? (
-            <p className="text-sm text-zinc-600 dark:text-zinc-400">
-              <span className="font-medium text-zinc-500 dark:text-zinc-500">
+            <p className="text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
+              <span className="font-semibold text-zinc-500 dark:text-zinc-500">
                 Notes:{" "}
               </span>
               {props.ai_related_notes}
@@ -79,7 +79,7 @@ export function CaptureCardLead(props: LeadFields) {
           ) : null}
         </div>
       ) : (
-        <p className="whitespace-pre-wrap text-[15px] leading-relaxed text-foreground">
+        <p className="whitespace-pre-wrap text-[15px] leading-relaxed text-zinc-900 dark:text-zinc-100">
           {props.raw_text ?? "—"}
         </p>
       )}
