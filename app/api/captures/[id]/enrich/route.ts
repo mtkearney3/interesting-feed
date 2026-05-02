@@ -1,4 +1,6 @@
+import { describeCaptureEnrichBranch } from "@/lib/captures-enrich-pipeline";
 import { runCaptureEnrichment } from "@/lib/run-capture-enrichment";
+import { supabase } from "@/lib/supabase";
 import { NextResponse } from "next/server";
 
 export const maxDuration = 60;
@@ -13,6 +15,22 @@ export async function POST(
   }
 
   try {
+    const { data: preRow } = await supabase
+      .from("captures")
+      .select("id, raw_text, url, image_url, capture_type, status")
+      .eq("id", id)
+      .single();
+    if (preRow) {
+      console.info(
+        "ENRICH_ROUTE_PIPELINE",
+        describeCaptureEnrichBranch({
+          id: preRow.id,
+          url: preRow.url,
+          raw_text: preRow.raw_text,
+          image_url: preRow.image_url,
+        })
+      );
+    }
     console.info("[enrich-route] POST", { captureId: id });
     const result = await runCaptureEnrichment(id);
 

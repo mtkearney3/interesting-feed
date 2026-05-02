@@ -1,19 +1,24 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, type MouseEvent } from "react";
 
 type Props = {
   captureId: string;
   status: string | null;
 };
 
+const retryButtonClass =
+  "inline-flex items-center justify-center rounded-full px-4 py-1.5 text-sm font-medium text-[#2f3e2f] bg-[#2f3e2f]/10 transition hover:bg-[#2f3e2f]/15 active:scale-95 disabled:opacity-50 dark:bg-white/10 dark:text-[#c4c9bf] dark:hover:bg-white/15";
+
+/** POSTs `/enrich` again. Only rendered when enrichment failed (`status === "error"`). */
 export function EnrichCaptureButton({ captureId, status }: Props) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  async function onEnrich() {
+  async function onEnrich(e: MouseEvent<HTMLButtonElement>) {
+    e.stopPropagation();
     setErr(null);
     setBusy(true);
     try {
@@ -35,26 +40,31 @@ export function EnrichCaptureButton({ captureId, status }: Props) {
     }
   }
 
-  const idleLabel =
-    status === "error" || status === "processing"
-      ? "Retry enrich"
-      : "Enrich";
+  if (String(status ?? "").toLowerCase() !== "error") {
+    return null;
+  }
 
   return (
-    <div className="mt-3 flex flex-col items-start gap-1">
+    <>
+      <p className="mb-1 text-center text-xs font-medium text-zinc-600 dark:text-zinc-400">
+        Analysis failed.
+      </p>
       <button
         type="button"
         onClick={onEnrich}
         disabled={busy}
-        className="rounded-md border border-zinc-300 bg-zinc-50 px-3 py-1.5 text-xs font-medium text-zinc-800 transition-colors hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+        className={retryButtonClass}
       >
-        {busy ? "Enriching…" : idleLabel}
+        {busy ? "Working…" : "Retry"}
       </button>
       {err ? (
-        <p className="text-xs text-red-600 dark:text-red-400" role="alert">
+        <p
+          className="max-w-full text-center text-xs text-red-600 dark:text-red-400"
+          role="alert"
+        >
           {err}
         </p>
       ) : null}
-    </div>
+    </>
   );
 }

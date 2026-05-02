@@ -48,4 +48,40 @@ body {
   .capture-thinking-dots > span:first-child {
     display: none;
   }
+
+  .capture-skeleton-shimmer {
+    animation: none;
+  }
+}
+
+@keyframes capture-skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.capture-skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgb(228 228 231 / 0.85) 0%,
+    rgb(244 244 245 / 0.95) 45%,
+    rgb(228 228 231 / 0.85) 90%
+  );
+  background-size: 200% 100%;
+  animation: capture-skeleton-shimmer 1.35s ease-in-out infinite;
+}
+
+@media (prefers-color-scheme: dark) {
+  .capture-skeleton-shimmer {
+    background: linear-gradient(
+      90deg,
+      rgb(39 39 42 / 0.9) 0%,
+      rgb(63 63 70 / 0.95) 45%,
+      rgb(39 39 42 / 0.9) 90%
+    );
+    background-size: 200% 100%;
+  }
 }

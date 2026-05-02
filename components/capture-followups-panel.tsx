@@ -1,30 +1,136 @@
 "use client";
 
-import { useCallback, useRef, useState, type ReactNode } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
+import { useCallback, useState, type ReactNode } from "react";
+import type { FollowupStructuredResponse } from "@/lib/openai-followup-answer";
 
-type Slot =
-  | { kind: "idle" }
-  | { kind: "loading" }
-  | { kind: "done"; answer: string; expanded: boolean }
-  | { kind: "error"; message: string };
+const followUpQuestionBtnClass =
+  "group flex w-full items-center justify-between gap-2 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-left text-[15px] font-medium text-blue-700 transition hover:bg-blue-100 active:scale-[0.98] dark:border-blue-900/45 dark:bg-blue-950/40 dark:text-blue-200 dark:hover:bg-blue-950/60";
+
+/** Suggested follow-ups inside an answer card (not preset list). */
+const keepGoingQuestionBtnClass =
+  "flex w-full items-center justify-between rounded-xl border border-blue-100 bg-white px-3 py-2 text-left text-sm font-medium text-blue-600 transition active:scale-[0.98] dark:border-blue-900/40 dark:bg-zinc-950 dark:text-blue-300";
 
 type Props = {
   captureId: string;
   presetQuestions: string[];
+  enrichSlot?: ReactNode;
 };
 
-function AnswerBlock({
-  children,
-  subtle,
+type AnswerEntry = {
+  loading: boolean;
+  error?: string;
+  data?: FollowupStructuredResponse;
+};
+
+function AnswerUnderQuestion({
+  answerKey,
+  expanded,
+  answersByKey,
+  expandedByKey,
+  onQuestionRowClick,
+  nested = false,
 }: {
-  children: ReactNode;
-  subtle?: boolean;
+  answerKey: string;
+  expanded: boolean;
+  answersByKey: Record<string, AnswerEntry>;
+  expandedByKey: Record<string, boolean>;
+  onQuestionRowClick: (key: string, questionText: string) => void;
+  nested?: boolean;
 }) {
+  if (!expanded) return null;
+
+  const state = answersByKey[answerKey];
+  if (!state) return null;
+
+  const loadingShell =
+    "rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-200";
+  const loadingShellNested =
+    "mt-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2.5 text-sm text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-200";
+
+  if (state.loading) {
+    return (
+      <div className={nested ? loadingShellNested : `ml-3 ${loadingShell}`}>
+        Thinking…
+      </div>
+    );
+  }
+
+  const errorShell =
+    "rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-200";
+  const errorShellNested =
+    "mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-200";
+
+  if (state.error) {
+    return (
+      <div className={nested ? errorShellNested : `ml-3 ${errorShell}`}>
+        {state.error}
+      </div>
+    );
+  }
+
+  if (!state.data) return null;
+
+  const { answer, followUps } = state.data;
+
+  const keepGoing =
+    followUps.length > 0 ? (
+      <div className="mt-4 border-t border-zinc-100 pt-3 dark:border-zinc-700/80">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
+          Keep going
+        </p>
+        <div className="space-y-2">
+          {followUps.map((fu, i) => {
+            const childKey = `${answerKey}/fu/${i}`;
+            const childOpen = expandedByKey[childKey] === true;
+            return (
+              <div key={childKey} className="space-y-2">
+                <button
+                  type="button"
+                  className={keepGoingQuestionBtnClass}
+                  onClick={() => onQuestionRowClick(childKey, fu)}
+                >
+                  <span className="min-w-0 flex-1 leading-snug">{fu}</span>
+                  {childOpen ? (
+                    <ChevronDown
+                      className="h-4 w-4 shrink-0 text-blue-400 dark:text-blue-400"
+                      aria-hidden
+                    />
+                  ) : (
+                    <ChevronRight
+                      className="h-4 w-4 shrink-0 text-blue-400 dark:text-blue-400"
+                      aria-hidden
+                    />
+                  )}
+                </button>
+                <AnswerUnderQuestion
+                  answerKey={childKey}
+                  expanded={childOpen}
+                  answersByKey={answersByKey}
+                  expandedByKey={expandedByKey}
+                  onQuestionRowClick={onQuestionRowClick}
+                  nested
+                />
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    ) : null;
+
+  if (nested) {
+    return (
+      <div className="mt-2 rounded-lg border border-zinc-100 bg-zinc-50/90 px-3 py-3 text-sm leading-relaxed text-zinc-700 shadow-inner dark:border-zinc-700 dark:bg-zinc-800/50 dark:text-zinc-300">
+        <span className="whitespace-pre-wrap">{answer}</span>
+        {keepGoing}
+      </div>
+    );
+  }
+
   return (
-    <div
-      className={`mt-2 border-l-[3px] border-sky-400/70 pl-3 text-sm leading-relaxed text-zinc-700 dark:border-sky-500/50 dark:text-zinc-300 ${subtle ? "italic text-zinc-500 dark:text-zinc-400" : ""}`}
-    >
-      {children}
+    <div className="ml-3 rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm leading-relaxed text-zinc-700 shadow-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
+      <span className="whitespace-pre-wrap">{answer}</span>
+      {keepGoing}
     </div>
   );
 }
@@ -32,131 +138,156 @@ function AnswerBlock({
 export function CaptureFollowupsPanel({
   captureId,
   presetQuestions,
+  enrichSlot,
 }: Props) {
-  const [presetSlots, setPresetSlots] = useState<Record<string, Slot>>({});
+  const [answersByKey, setAnswersByKey] = useState<
+    Record<string, AnswerEntry>
+  >({});
+  const [expandedByKey, setExpandedByKey] = useState<Record<string, boolean>>(
+    {}
+  );
+  const [customRows, setCustomRows] = useState<{ id: string; text: string }[]>(
+    []
+  );
   const [customText, setCustomText] = useState("");
-  const [customSlot, setCustomSlot] = useState<Slot>({ kind: "idle" });
-  const lastCustomQuestion = useRef("");
-
-  const presetKey = (index: number) => `p:${index}`;
+  const [customAskBusy, setCustomAskBusy] = useState(false);
 
   const postQuestion = useCallback(
-    async (question: string) => {
+    async (question: string): Promise<FollowupStructuredResponse> => {
       const res = await fetch(`/api/captures/${captureId}/followup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question }),
       });
-      const data = (await res.json()) as { answer?: string; error?: string };
+      const data = (await res.json()) as {
+        answer?: string;
+        followUps?: unknown;
+        related?: unknown;
+        error?: string;
+      };
       if (!res.ok) {
         throw new Error(data.error ?? `Request failed (${res.status})`);
       }
       if (typeof data.answer !== "string" || !data.answer.trim()) {
         throw new Error("Empty answer from server");
       }
-      return data.answer.trim();
+      const followUps = Array.isArray(data.followUps)
+        ? data.followUps
+            .map((x) => (typeof x === "string" ? x.trim() : ""))
+            .filter(Boolean)
+        : [];
+      return {
+        answer: data.answer.trim(),
+        followUps,
+        related: [],
+      };
     },
     [captureId]
   );
 
-  async function onPresetClick(index: number, question: string) {
-    const key = presetKey(index);
-    let shouldFetch = false;
-
-    setPresetSlots((prev) => {
-      const cur = prev[key];
-      if (cur?.kind === "done") {
-        return {
-          ...prev,
-          [key]: { ...cur, expanded: !cur.expanded },
-        };
-      }
-      if (cur?.kind === "loading") {
-        return prev;
-      }
-      shouldFetch = true;
-      return { ...prev, [key]: { kind: "loading" } };
-    });
-
-    if (!shouldFetch) return;
-
-    try {
-      const answer = await postQuestion(question);
-      setPresetSlots((prev) => ({
+  const askQuestion = useCallback(
+    (answerKey: string, questionText: string): Promise<void> => {
+      setAnswersByKey((prev) => ({
         ...prev,
-        [key]: { kind: "done", answer, expanded: true },
+        [answerKey]: { loading: true },
       }));
-    } catch (e) {
-      const message = e instanceof Error ? e.message : "Something went wrong";
-      setPresetSlots((prev) => ({
+
+      return (async () => {
+        try {
+          const data = await postQuestion(questionText);
+          setAnswersByKey((prev) => ({
+            ...prev,
+            [answerKey]: { loading: false, data },
+          }));
+        } catch (e) {
+          const message =
+            e instanceof Error ? e.message : "Something went wrong";
+          setAnswersByKey((prev) => ({
+            ...prev,
+            [answerKey]: { loading: false, error: message },
+          }));
+        }
+      })();
+    },
+    [postQuestion]
+  );
+
+  const handleQuestionRowClick = useCallback(
+    (answerKey: string, questionText: string) => {
+      const wasExpanded = expandedByKey[answerKey] === true;
+      const willOpen = !wasExpanded;
+
+      setExpandedByKey((prev) => ({
         ...prev,
-        [key]: { kind: "error", message },
+        [answerKey]: willOpen,
       }));
-    }
-  }
+
+      if (!willOpen) return;
+
+      const entry = answersByKey[answerKey];
+      if (!entry?.data && !entry?.loading) {
+        askQuestion(answerKey, questionText);
+      }
+    },
+    [answersByKey, askQuestion, expandedByKey]
+  );
 
   async function onCustomAsk() {
     const q = customText.trim();
-    if (!q) return;
-
-    if (
-      customSlot.kind === "done" &&
-      q === lastCustomQuestion.current &&
-      customSlot.answer
-    ) {
-      setCustomSlot({
-        ...customSlot,
-        expanded: !customSlot.expanded,
-      });
-      return;
-    }
-
-    setCustomSlot({ kind: "loading" });
+    if (!q || customAskBusy) return;
+    setCustomAskBusy(true);
     try {
-      const answer = await postQuestion(q);
-      lastCustomQuestion.current = q;
-      setCustomSlot({ kind: "done", answer, expanded: true });
-    } catch (e) {
-      const message = e instanceof Error ? e.message : "Something went wrong";
-      setCustomSlot({ kind: "error", message });
+      const id = crypto.randomUUID();
+      const answerKey = `custom/${id}`;
+      setCustomRows((prev) => [...prev, { id, text: q }]);
+      setExpandedByKey((prev) => ({ ...prev, [answerKey]: true }));
+      setCustomText("");
+      await askQuestion(answerKey, q);
+    } finally {
+      setCustomAskBusy(false);
     }
   }
 
   return (
-    <div className="mt-4 space-y-4 border-t border-zinc-100 pt-4 dark:border-zinc-800">
+    <div className="mt-2 space-y-2.5 border-t border-zinc-200/80 pt-2.5 dark:border-zinc-800 sm:mt-4 sm:space-y-4 sm:pt-4">
       {presetQuestions.length > 0 ? (
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+          <p className="text-sm font-semibold uppercase tracking-wide text-zinc-500 sm:text-xs">
             Follow-up questions
           </p>
           <ul className="mt-2 space-y-2">
             {presetQuestions.map((question, index) => {
-              const key = presetKey(index);
-              const slot = presetSlots[key] ?? { kind: "idle" };
+              const answerKey = `preset/${index}`;
+              const isOpen = expandedByKey[answerKey] === true;
               return (
-                <li key={key} className="text-sm">
+                <li key={answerKey} className="space-y-2">
                   <button
                     type="button"
-                    onClick={() => void onPresetClick(index, question)}
-                    className="w-full rounded-lg border border-zinc-200/90 bg-zinc-50/90 px-3 py-2.5 text-left text-sm font-normal leading-snug text-sky-800 transition-colors hover:border-sky-300/80 hover:bg-sky-50/80 dark:border-zinc-700 dark:bg-zinc-800/60 dark:text-sky-200 dark:hover:border-sky-700/50 dark:hover:bg-sky-950/40"
+                    onClick={() => handleQuestionRowClick(answerKey, question)}
+                    className={followUpQuestionBtnClass}
                   >
-                    {question}
+                    <span className="min-w-0 flex-1 leading-snug">
+                      {question}
+                    </span>
+                    {isOpen ? (
+                      <ChevronDown
+                        className="h-4 w-4 shrink-0 text-blue-400 dark:text-blue-400"
+                        aria-hidden
+                      />
+                    ) : (
+                      <ChevronRight
+                        className="h-4 w-4 shrink-0 text-blue-400 dark:text-blue-400"
+                        aria-hidden
+                      />
+                    )}
                   </button>
-                  {slot.kind === "loading" ? (
-                    <AnswerBlock subtle>Thinking…</AnswerBlock>
-                  ) : null}
-                  {slot.kind === "error" ? (
-                    <AnswerBlock>
-                      <span className="text-red-600 dark:text-red-400">
-                        {slot.message}
-                      </span>
-                    </AnswerBlock>
-                  ) : null}
-                  {slot.kind === "done" && slot.expanded ? (
-                    <AnswerBlock>
-                      <span className="whitespace-pre-wrap">{slot.answer}</span>
-                    </AnswerBlock>
-                  ) : null}
+                  <AnswerUnderQuestion
+                    answerKey={answerKey}
+                    expanded={isOpen}
+                    answersByKey={answersByKey}
+                    expandedByKey={expandedByKey}
+                    onQuestionRowClick={handleQuestionRowClick}
+                  />
                 </li>
               );
             })}
@@ -164,42 +295,80 @@ export function CaptureFollowupsPanel({
         </div>
       ) : null}
 
-      <div className="space-y-2">
-        <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+      <div className="space-y-1.5 sm:space-y-2">
+        <p className="text-sm font-semibold uppercase tracking-wide text-zinc-500 sm:text-xs">
           Your question
         </p>
-        <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-stretch">
+        <div className="flex w-full items-center rounded-xl border border-blue-200 bg-white px-3 py-2 shadow-sm transition focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 dark:border-blue-900/40 dark:bg-zinc-900 dark:focus-within:border-blue-500 dark:focus-within:ring-blue-950/40">
           <input
             type="text"
             value={customText}
             onChange={(e) => setCustomText(e.target.value)}
-            placeholder="Ask your own follow-up…"
-            className="min-h-[44px] w-full min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-sm text-zinc-900 shadow-sm outline-none ring-sky-500/20 placeholder:text-zinc-500 focus:border-sky-400 focus:ring-2 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-sky-600"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                if (customAskBusy || !customText.trim()) return;
+                void onCustomAsk();
+              }
+            }}
+            placeholder="Ask your own follow-up..."
+            className="min-w-0 flex-1 border-0 bg-transparent py-1 text-sm text-blue-700 outline-none placeholder:text-gray-400 dark:text-blue-300 dark:placeholder:text-zinc-500"
           />
           <button
             type="button"
+            disabled={customAskBusy}
             onClick={() => void onCustomAsk()}
-            className="min-h-[44px] w-full shrink-0 rounded-lg border border-sky-200 bg-sky-50 px-4 py-2.5 text-sm font-semibold text-sky-900 hover:bg-sky-100 dark:border-sky-900/40 dark:bg-sky-950/50 dark:text-sky-100 dark:hover:bg-sky-950/80 sm:w-auto sm:min-h-0 sm:px-5"
+            className="ml-2 shrink-0 text-sm font-medium text-blue-600 transition hover:text-blue-700 active:opacity-80 disabled:opacity-50 dark:text-blue-400 dark:hover:text-blue-300"
           >
-            Ask
+            {customAskBusy ? "Asking…" : "Ask"}
           </button>
         </div>
-        {customSlot.kind === "loading" ? (
-          <AnswerBlock subtle>Thinking…</AnswerBlock>
-        ) : null}
-        {customSlot.kind === "error" ? (
-          <AnswerBlock>
-            <span className="text-red-600 dark:text-red-400">
-              {customSlot.message}
-            </span>
-          </AnswerBlock>
-        ) : null}
-        {customSlot.kind === "done" && customSlot.expanded ? (
-          <AnswerBlock>
-            <span className="whitespace-pre-wrap">{customSlot.answer}</span>
-          </AnswerBlock>
+        {enrichSlot ? (
+          <div className="mt-1.5 flex justify-center">
+            <div className="flex flex-col items-center gap-1">{enrichSlot}</div>
+          </div>
         ) : null}
       </div>
+
+      {customRows.length > 0 ? (
+        <ul className="space-y-4">
+          {customRows.map(({ id, text }) => {
+            const answerKey = `custom/${id}`;
+            const isOpen = expandedByKey[answerKey] === true;
+            return (
+              <li key={id} className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => handleQuestionRowClick(answerKey, text)}
+                  className={followUpQuestionBtnClass}
+                >
+                  <span className="min-w-0 flex-1 text-left leading-snug">
+                    {text}
+                  </span>
+                  {isOpen ? (
+                    <ChevronDown
+                      className="h-4 w-4 shrink-0 text-blue-400 dark:text-blue-400"
+                      aria-hidden
+                    />
+                  ) : (
+                    <ChevronRight
+                      className="h-4 w-4 shrink-0 text-blue-400 dark:text-blue-400"
+                      aria-hidden
+                    />
+                  )}
+                </button>
+                <AnswerUnderQuestion
+                  answerKey={answerKey}
+                  expanded={isOpen}
+                  answersByKey={answersByKey}
+                  expandedByKey={expandedByKey}
+                  onQuestionRowClick={handleQuestionRowClick}
+                />
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
     </div>
   );
 }

@@ -1,7 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { CaptureRow } from "@/lib/capture";
 
 function looksLikeHttpUrl(text: string): boolean {
   const t = text.trim();
@@ -23,9 +24,6 @@ export function CaptureForm() {
   const [rawText, setRawText] = useState("");
   const [url, setUrl] = useState("");
   const [source, setSource] = useState("manual");
-  const [captureType, setCaptureType] = useState<"text" | "link" | "screenshot">(
-    "link"
-  );
   const [userNote, setUserNote] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -34,10 +32,15 @@ export function CaptureForm() {
   const [showSaved, setShowSaved] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const moreOptionsRef = useRef<HTMLDetailsElement>(null);
+  const formRef = useRef<HTMLFormElement | null>(null);
+  const addClipPanelRef = useRef<HTMLDivElement | null>(null);
+  const scrollAddClipIntoViewAfterOpen = useRef(false);
   const savedHideTimeoutRef = useRef<number | null>(null);
-  const feedRefreshTimeoutRef = useRef<number | null>(null);
+  const mountedRef = useRef(true);
 
-  rawTextRef.current = rawText;
+  useEffect(() => {
+    rawTextRef.current = rawText;
+  }, [rawText]);
 
   useEffect(() => {
     const syncMoreOpen = () => {
@@ -51,15 +54,25 @@ export function CaptureForm() {
   }, []);
 
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
+      mountedRef.current = false;
       if (savedHideTimeoutRef.current) {
         clearTimeout(savedHideTimeoutRef.current);
       }
-      if (feedRefreshTimeoutRef.current) {
-        clearTimeout(feedRefreshTimeoutRef.current);
-      }
     };
   }, []);
+
+  useLayoutEffect(() => {
+    if (!formOpen || !scrollAddClipIntoViewAfterOpen.current) return;
+    scrollAddClipIntoViewAfterOpen.current = false;
+    requestAnimationFrame(() => {
+      addClipPanelRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  }, [formOpen]);
 
   async function handleUrlPaste(e: React.ClipboardEvent<HTMLInputElement>) {
     const pasted = e.clipboardData?.getData("text/plain")?.trim() ?? "";
@@ -87,14 +100,26 @@ export function CaptureForm() {
     });
   }
 
+  function trySubmitClipFromEnter(e: React.KeyboardEvent) {
+    if (e.key !== "Enter" || e.shiftKey) return;
+    e.preventDefault();
+    if (pending) return;
+    formRef.current?.requestSubmit();
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (pending) return;
     setError(null);
     setShowSaved(false);
     setPending(true);
     try {
-      if (captureType === "screenshot" && !imageFile) {
-        setError("Screenshot captures require an image file.");
+      const hasText = rawText.trim().length > 0;
+      const hasUrl = url.trim().length > 0;
+      const hasScreenshotFile = Boolean(imageFile);
+
+      if (!hasText && !hasUrl && !hasScreenshotFile) {
+        setError("Add text, a screenshot, or a URL.");
         return;
       }
 
@@ -118,31 +143,79 @@ export function CaptureForm() {
         imageUrl = upBody.image_url;
       }
 
+      const hasImage = Boolean(imageUrl);
+
+      let inferredType: "text" | "link" | "url" | "screenshot";
+      if (hasUrl) {
+        inferredType = "url";
+      } else if (hasImage) {
+        inferredType = "screenshot";
+      } else {
+        inferredType = "text";
+      }
+
       const payload: Record<string, string | undefined> = {
         raw_text: rawText.trim(),
         url: url.trim(),
         source: source.trim() || "manual",
-        capture_type: captureType,
+        capture_type: inferredType,
         user_note: userNote.trim() || undefined,
       };
       if (imageUrl) payload.image_url = imageUrl;
+
+      console.log("CAPTURE_FORM_SUBMIT", {
+        hasUrlField: Object.prototype.hasOwnProperty.call(payload, "url"),
+        urlLen: (payload.url ?? "").length,
+        urlPrefix: (payload.url ?? "").slice(0, 120),
+        rawLen: (payload.raw_text ?? "").length,
+        capture_type: payload.capture_type,
+        hasImageUrl: Boolean(payload.image_url),
+        source: payload.source,
+      });
 
       const res = await fetch("/api/captures", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const body = (await res.json()) as { error?: string };
+      let body: CaptureRow & { error?: string };
+      try {
+        body = (await res.json()) as CaptureRow & { error?: string };
+      } catch (jsonErr) {
+        console.error("CAPTURE_FORM_SUBMIT_RESPONSE", {
+          ok: res.ok,
+          status: res.status,
+          parseJsonError:
+            jsonErr instanceof Error ? jsonErr.message : String(jsonErr),
+        });
+        throw jsonErr;
+      }
+
+      console.log("CAPTURE_FORM_SUBMIT_RESPONSE", {
+        ok: res.ok,
+        status: res.status,
+        responseId: body.id ?? null,
+        responseUrl: typeof body.url === "string" ? body.url.slice(0, 120) : body.url,
+        responseError: body.error ?? null,
+      });
 
       if (!res.ok) {
         setError(body.error ?? `Request failed (${res.status})`);
         return;
       }
 
+      console.log("CAPTURE_FORM_SUBMIT_OK", {
+        newClipId: body.id,
+        willRouterRefresh: true,
+      });
+
+      const newClipId = body.id;
+
+      if (!mountedRef.current) return;
+
       setRawText("");
       setUrl("");
       setSource("manual");
-      setCaptureType("link");
       setUserNote("");
       setImageFile(null);
       if (imageInputRef.current) {
@@ -156,34 +229,31 @@ export function CaptureForm() {
       }
       setShowSaved(true);
       savedHideTimeoutRef.current = window.setTimeout(() => {
-        setShowSaved(false);
+        if (mountedRef.current) {
+          setShowSaved(false);
+        }
         savedHideTimeoutRef.current = null;
       }, 1000);
 
-      router.refresh();
-      if (feedRefreshTimeoutRef.current) {
-        clearTimeout(feedRefreshTimeoutRef.current);
-      }
-      feedRefreshTimeoutRef.current = window.setTimeout(() => {
-        feedRefreshTimeoutRef.current = null;
+      queueMicrotask(() => {
+        if (!mountedRef.current) return;
+        console.log("CAPTURE_FORM_ROUTER_REFRESH", { newClipId });
         router.refresh();
-      }, 2500);
+        if (newClipId) {
+          window.setTimeout(() => {
+            document
+              .getElementById(`clip-${newClipId}`)
+              ?.scrollIntoView({ behavior: "smooth", block: "start" });
+          }, 200);
+        }
+      });
     } catch {
-      setError("Network error");
+      if (mountedRef.current) {
+        setError("Network error");
+      }
     } finally {
-      setPending(false);
-    }
-  }
-
-  function onCaptureTypeChange(next: "text" | "link" | "screenshot") {
-    setCaptureType(next);
-    if (next === "text") {
-      setUrl("");
-    }
-    if (next !== "screenshot") {
-      setImageFile(null);
-      if (imageInputRef.current) {
-        imageInputRef.current.value = "";
+      if (mountedRef.current) {
+        setPending(false);
       }
     }
   }
@@ -194,29 +264,41 @@ export function CaptureForm() {
   const labelClass =
     "text-xs font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-400";
 
+  const addClipPanelScroll =
+    "scroll-mt-20 sm:scroll-mt-0";
+
+  function handleOpenAddClip() {
+    scrollAddClipIntoViewAfterOpen.current = true;
+    setFormOpen(true);
+  }
+
   return (
-    <section className="mb-4 sm:mb-8">
-      <button
-        type="button"
-        onClick={() => setFormOpen(true)}
-        className="mb-3 flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-zinc-300 bg-white py-3 text-sm font-semibold text-zinc-700 shadow-sm transition-colors hover:border-sky-400/60 hover:bg-sky-50/50 hover:text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900/80 dark:text-zinc-200 dark:hover:border-sky-700/50 dark:hover:bg-sky-950/30 sm:hidden"
-      >
-        <span className="text-lg leading-none text-sky-600 dark:text-sky-400" aria-hidden>
-          +
-        </span>
-        New Capture
-      </button>
+    <section className="mb-2 sm:mb-8">
+      {!formOpen ? (
+        <button
+          type="button"
+          onClick={handleOpenAddClip}
+          className="fixed bottom-[calc(1rem+env(safe-area-inset-bottom,0px))] right-4 z-40 inline-flex items-center justify-center gap-1.5 rounded-full bg-gradient-to-br from-[#263526] via-[#2f3e2f] to-[#4a3f20] px-5 py-3 text-sm font-semibold text-white shadow-[0_10px_25px_rgba(47,62,47,0.35)] ring-1 ring-[#d4a017]/35 transition active:scale-95 sm:hidden"
+          aria-label="Add clip"
+        >
+          <span className="text-lg font-semibold leading-none text-[#d4a017]">
+            +
+          </span>
+          Clips
+        </button>
+      ) : null}
 
       <div
+        ref={addClipPanelRef}
         className={
           formOpen
-            ? "block rounded-xl border border-zinc-200 bg-white p-4 shadow-md dark:border-zinc-800 dark:bg-zinc-900 sm:block sm:rounded-xl sm:border sm:p-5 sm:shadow-sm"
-            : "hidden sm:block sm:rounded-xl sm:border sm:border-zinc-200 sm:bg-white sm:p-5 sm:shadow-sm dark:sm:border-zinc-800 dark:sm:bg-zinc-900"
+            ? `block rounded-xl border border-zinc-200 bg-white p-4 shadow-md dark:border-zinc-800 dark:bg-zinc-900 sm:block sm:rounded-xl sm:border sm:p-5 sm:shadow-sm ${addClipPanelScroll}`
+            : `hidden sm:block sm:rounded-xl sm:border sm:border-zinc-200 sm:bg-white sm:p-5 sm:shadow-sm dark:sm:border-zinc-800 dark:sm:bg-zinc-900 ${addClipPanelScroll}`
         }
       >
         <div className="mb-3 flex items-center justify-between sm:mb-4">
           <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-50 sm:text-lg">
-            New capture
+            New clip
           </h2>
           <button
             type="button"
@@ -227,39 +309,38 @@ export function CaptureForm() {
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-4">
+        <form
+          ref={formRef}
+          noValidate
+          onSubmit={handleSubmit}
+          className="space-y-3 sm:space-y-4"
+        >
           <label className="block">
             <span className={labelClass}>Text</span>
             <textarea
               name="raw_text"
-              required={captureType === "text"}
               rows={3}
               value={rawText}
               onChange={(e) => setRawText(e.target.value)}
+              onKeyDown={trySubmitClipFromEnter}
               className={`${fieldClass} min-h-[4.5rem] resize-y font-sans sm:min-h-[6.5rem]`}
-              placeholder="What you captured…"
+              placeholder="What you saved…"
             />
           </label>
 
-          {captureType !== "text" ? (
-            <label className="block">
-              <span className={labelClass}>URL</span>
-              <input
-                name="url"
-                type="url"
-                required={captureType === "link"}
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                onPaste={handleUrlPaste}
-                className={fieldClass}
-                placeholder={
-                  captureType === "screenshot"
-                    ? "Optional page URL…"
-                    : "https://…"
-                }
-              />
-            </label>
-          ) : null}
+          <label className="block">
+            <span className={labelClass}>URL</span>
+            <input
+              name="url"
+              type="url"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              onPaste={handleUrlPaste}
+              onKeyDown={trySubmitClipFromEnter}
+              className={fieldClass}
+              placeholder="Optional — https://…"
+            />
+          </label>
 
           <label className="block">
             <span className={labelClass}>Screenshot image</span>
@@ -268,35 +349,21 @@ export function CaptureForm() {
               name="screenshot"
               type="file"
               accept="image/jpeg,image/png,image/webp,image/gif"
-              required={captureType === "screenshot"}
               onChange={(e) =>
                 setImageFile(e.target.files?.item(0) ?? null)
               }
               className={`${fieldClass} py-2.5 file:mr-3 file:rounded-md file:border-0 file:bg-zinc-200 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-zinc-800 dark:file:bg-zinc-700 dark:file:text-zinc-200`}
             />
             <p className="mt-1 text-[11px] leading-snug text-zinc-500 dark:text-zinc-400">
-              JPEG, PNG, WebP, or GIF (max 5MB). Required for Screenshot type;
-              optional otherwise.
+              JPEG, PNG, WebP, or GIF (max 5MB). Optional unless you are not
+              adding text or a URL.
             </p>
           </label>
 
-          <label className="block">
-            <span className={labelClass}>Capture type</span>
-            <select
-              name="capture_type"
-              value={captureType}
-              onChange={(e) =>
-                onCaptureTypeChange(
-                  e.target.value as "text" | "link" | "screenshot"
-                )
-              }
-              className={fieldClass}
-            >
-              <option value="link">Link</option>
-              <option value="text">Text</option>
-              <option value="screenshot">Screenshot</option>
-            </select>
-          </label>
+          <p className="text-[11px] leading-snug text-zinc-500 dark:text-zinc-400">
+            Clip type is set when you save: URL → url, else image →
+            screenshot, else → text.
+          </p>
 
           <div className="rounded-lg border border-zinc-200 dark:border-zinc-700 sm:border-0 sm:p-0">
             <details ref={moreOptionsRef} className="group">
@@ -355,7 +422,7 @@ export function CaptureForm() {
               disabled={pending}
               className="w-full rounded-lg bg-zinc-900 px-4 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 sm:w-auto sm:py-2"
             >
-              {pending ? "Saving…" : "Save capture"}
+              {pending ? "Saving…" : "Save clip"}
             </button>
           </div>
         </form>
