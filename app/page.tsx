@@ -1,4 +1,5 @@
 import { CaptureFeedWithDetail } from "@/components/capture-feed-with-detail";
+import { MobilePullToRefresh } from "@/components/mobile-pull-to-refresh";
 import { RabbitHoleScrollProvider } from "@/components/rabbit-hole-scroll-context";
 import { RabbitHoleStickyHeader } from "@/components/rabbit-hole-sticky-header";
 import type { CaptureRow } from "@/lib/capture";
@@ -30,15 +31,17 @@ export default async function Home() {
   return (
     <div className="flex-1 bg-zinc-200 dark:bg-zinc-900">
       <RabbitHoleScrollProvider>
-        <div className={rabbitHoleMainWidthClass}>
-          <RabbitHoleStickyHeader
-            clips={rows.map((r) => ({ created_at: r.created_at }))}
-          />
+        <MobilePullToRefresh>
+          <div className={rabbitHoleMainWidthClass}>
+            <RabbitHoleStickyHeader
+              clips={rows.map((r) => ({ created_at: r.created_at }))}
+            />
 
-          <div className="w-full px-3 pb-28 pt-0 sm:pb-8 sm:pt-8">
-            <CaptureFeedWithDetail rows={rows} />
+            <div className="w-full px-3 pb-28 pt-0 sm:pb-8 sm:pt-8">
+              <CaptureFeedWithDetail rows={rows} />
+            </div>
           </div>
-        </div>
+        </MobilePullToRefresh>
       </RabbitHoleScrollProvider>
     </div>
   );
