@@ -4,12 +4,18 @@ import type { MouseEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import {
+  captureRawTextForDisplay,
   captureStatusDisplay,
+  captureUrlForFeedDisplay,
   feedCaptureTypeDisplay,
   formatCaptureDateShort,
   parseFollowupQuestions,
   type CaptureRow,
 } from "@/lib/capture";
+import {
+  captureBodyCopySizeClass,
+  captureMetadataTextSizeClass,
+} from "@/lib/capture-ui";
 import { CaptureCardLead } from "@/components/capture-card-lead";
 import { StickyClipTitle } from "@/components/capture-sticky-feed-title-dual";
 import { CaptureFollowupsPanel } from "@/components/capture-followups-panel";
@@ -80,7 +86,9 @@ function AnalyzingStatusBlock({
       aria-live="polite"
     >
       {phase >= 1 ? (
-        <p className="text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
+        <p
+          className={`${captureMetadataTextSizeClass} font-medium text-zinc-400 dark:text-zinc-500`}
+        >
           Still analyzing…
         </p>
       ) : null}
@@ -89,7 +97,7 @@ function AnalyzingStatusBlock({
           type="button"
           onClick={onRetry}
           disabled={retryBusy}
-          className="inline-flex rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1 text-[11px] font-semibold text-zinc-700 transition hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+          className={`inline-flex rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1 ${captureMetadataTextSizeClass} font-semibold text-zinc-700 transition hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700`}
         >
           {retryBusy ? "Retrying…" : "Retry analysis"}
         </button>
@@ -109,8 +117,10 @@ export function CaptureFeedCard({ c, onOpenDetail }: Props) {
   const presetFollowups = hasAi
     ? parseFollowupQuestions(c.ai_followup_questions)
     : [];
+  const displayRaw = captureRawTextForDisplay(c.raw_text, c.image_url);
+  const displayUrl = captureUrlForFeedDisplay(c);
   const hasMetaExtra =
-    Boolean(c.user_note?.trim()) || (hasAi && Boolean(c.raw_text?.trim()));
+    Boolean(c.user_note?.trim()) || (hasAi && Boolean(displayRaw?.trim()));
   const hasImage = Boolean(c.image_url);
   const interactive = Boolean(onOpenDetail);
   const omitFeedTitle = hasAi && Boolean(c.ai_title?.trim());
@@ -119,7 +129,7 @@ export function CaptureFeedCard({ c, onOpenDetail }: Props) {
     <article
       id={`clip-${c.id}`}
       onClick={onOpenDetail ? () => onOpenDetail() : undefined}
-      className={`relative mb-5 w-full min-w-0 overflow-visible rounded-2xl border border-zinc-200 bg-white px-0 pb-4 pt-0 shadow-sm transition hover:shadow-md max-sm:touch-manipulation dark:border-zinc-700 dark:bg-zinc-800 sm:py-4 ${interactive ? "cursor-pointer" : ""}`}
+      className={`relative mb-5 w-full min-w-0 overflow-visible rounded-2xl border border-zinc-200 bg-white px-0 pb-4 pt-0 shadow-md transition hover:shadow-md max-sm:touch-manipulation dark:border-zinc-700 dark:bg-zinc-800 sm:py-4 ${interactive ? "cursor-pointer" : ""}`}
     >
       <StickyClipTitle clip={c} />
 
@@ -137,7 +147,7 @@ export function CaptureFeedCard({ c, onOpenDetail }: Props) {
 
       <div className="px-3">
         <div
-          className="mt-2 mb-3 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs text-zinc-400"
+          className={`mt-2 mb-3 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 ${captureMetadataTextSizeClass} text-zinc-400`}
           onClick={interactive ? stopOpenDetail : undefined}
         >
         <span className="max-w-[36%] truncate sm:max-w-none">
@@ -175,7 +185,7 @@ export function CaptureFeedCard({ c, onOpenDetail }: Props) {
         <div className="space-y-2 sm:space-y-3">
         <CaptureCardLead
           status={c.status}
-          raw_text={c.raw_text}
+          raw_text={hasImage ? displayRaw : c.raw_text}
           ai_title={c.ai_title}
           ai_summary={c.ai_summary}
           ai_why_interesting={c.ai_why_interesting}
@@ -186,18 +196,18 @@ export function CaptureFeedCard({ c, onOpenDetail }: Props) {
           omitFeedTitle={omitFeedTitle}
         />
 
-        {c.url ? (
+        {displayUrl ? (
           <p
-            className="min-w-0 break-words text-base sm:text-sm"
+            className={`min-w-0 break-words ${captureBodyCopySizeClass}`}
             onClick={interactive ? stopOpenDetail : undefined}
           >
             <a
-              href={c.url}
+              href={displayUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="font-medium text-sky-700 underline decoration-sky-700/30 underline-offset-2 hover:decoration-sky-700 dark:text-sky-400 dark:decoration-sky-400/30"
             >
-              {c.url}
+              {displayUrl}
             </a>
           </p>
         ) : null}
@@ -221,10 +231,14 @@ export function CaptureFeedCard({ c, onOpenDetail }: Props) {
             className="rounded-xl border border-zinc-200/90 bg-zinc-50/80 px-2 py-1 dark:border-zinc-800 dark:bg-zinc-950/50"
             onClick={interactive ? stopOpenDetail : undefined}
           >
-            <summary className="cursor-pointer list-none py-1.5 text-sm font-medium text-zinc-600 marker:hidden [&::-webkit-details-marker]:hidden dark:text-zinc-400 sm:text-xs">
+            <summary
+              className={`cursor-pointer list-none py-1.5 ${captureMetadataTextSizeClass} font-medium text-zinc-600 marker:hidden [&::-webkit-details-marker]:hidden dark:text-zinc-400`}
+            >
               Note &amp; original text
             </summary>
-            <div className="space-y-1.5 border-t border-zinc-200/80 py-2 text-sm text-zinc-600 dark:border-zinc-800 dark:text-zinc-400 sm:space-y-2 sm:text-xs">
+            <div
+              className={`space-y-1.5 border-t border-zinc-200/80 py-2 ${captureBodyCopySizeClass} text-zinc-600 dark:border-zinc-800 dark:text-zinc-400 sm:space-y-2`}
+            >
               <p>
                 <span className="font-semibold text-zinc-500 dark:text-zinc-500">
                   Note:{" "}

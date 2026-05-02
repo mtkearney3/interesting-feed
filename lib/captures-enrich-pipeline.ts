@@ -1,13 +1,19 @@
 /**
  * Runtime enrichment routing labels (logged + persisted on `captures.last_enrichment_pipeline`).
+ * Classification is delegated to {@link getCaptureKind} in `lib/capture-kind.ts` only.
  */
+
+import {
+  getCaptureKind,
+  type CaptureKindPipeline,
+} from "@/lib/capture-kind";
 
 export const EnrichPipeline = {
   URL_ARTICLE_TEXT_ONLY: "URL_ARTICLE_TEXT_ONLY",
-  URL_ARTICLE_TEXT_ONLY_INSUFFICIENT: "URL_ARTICLE_TEXT_ONLY_INSUFFICIENT",
-  SCREENSHOT_OPENAI_VISION: "SCREENSHOT_OPENAI_VISION",
-  SCREENSHOT_TEXT_PRIMARY: "SCREENSHOT_TEXT_PRIMARY",
-  PLAIN_TEXT: "PLAIN_TEXT",
+  URL_ARTICLE_INSUFFICIENT: "URL_ARTICLE_INSUFFICIENT",
+  IMAGE_VISION: "IMAGE_VISION",
+  IMAGE_SCREENSHOT_TEXT_PRIMARY: "IMAGE_SCREENSHOT_TEXT_PRIMARY",
+  TEXT_ONLY: "TEXT_ONLY",
 } as const;
 
 export type EnrichPipelineName =
@@ -19,48 +25,62 @@ export type CaptureEnrichBranchInfo = {
   isUrlCapture: boolean;
   hasImageUrl: boolean;
   hasScreenshotImage: boolean;
-  /** Intended branch before OpenAI (must be {@link EnrichPipeline.URL_ARTICLE_TEXT_ONLY} for URL clips). */
   selectedPipeline: EnrichPipelineName;
   selectedFunctionName:
     | "enrichUrlClipTextOnly"
     | "enrichNonUrlCaptureWithOpenAI";
 };
 
-function substantiveRawText(raw: string | null | undefined): boolean {
-  return Boolean(raw && raw.trim().length >= 100);
+function pipelineFromKind(p: CaptureKindPipeline): EnrichPipelineName {
+  switch (p) {
+    case "IMAGE_VISION":
+      return EnrichPipeline.IMAGE_VISION;
+    case "IMAGE_SCREENSHOT_TEXT_PRIMARY":
+      return EnrichPipeline.IMAGE_SCREENSHOT_TEXT_PRIMARY;
+    case "URL_ARTICLE_TEXT_ONLY":
+      return EnrichPipeline.URL_ARTICLE_TEXT_ONLY;
+    case "TEXT_ONLY":
+      return EnrichPipeline.TEXT_ONLY;
+    default: {
+      const _x: never = p;
+      return _x;
+    }
+  }
 }
 
 export function describeCaptureEnrichBranch(row: {
   id: string;
   url?: string | null;
+  capture_type?: string | null;
   raw_text?: string | null;
   image_url?: string | null;
   screenshot_url?: string | null;
 }): CaptureEnrichBranchInfo {
-  const url = row.url?.trim() ? String(row.url).trim() : null;
-  const hasImageUrl = Boolean(String(row.image_url ?? "").trim());
+  const imageTrim = String(row.image_url ?? "").trim();
+  const hasImageUrl = Boolean(imageTrim);
   const hasScreenshotImage = Boolean(String(row.screenshot_url ?? "").trim());
 
-  /** Hard rule: persisted `url` wins before any image / screenshot routing. */
-  if (url) {
+  const k = getCaptureKind({
+    capture_type: row.capture_type,
+    url: row.url,
+    image_url: row.image_url,
+    raw_text: row.raw_text,
+  });
+
+  const selectedPipeline = pipelineFromKind(k.pipeline);
+
+  if (k.kind === "url") {
     return {
       clipId: row.id,
-      url,
+      url: k.articleUrl,
       isUrlCapture: true,
       hasImageUrl,
       hasScreenshotImage,
-      selectedPipeline: EnrichPipeline.URL_ARTICLE_TEXT_ONLY,
+      selectedPipeline,
       selectedFunctionName: "enrichUrlClipTextOnly",
     };
   }
 
-  const hasSubstantiveRaw = substantiveRawText(row.raw_text ?? null);
-  const selectedPipeline: CaptureEnrichBranchInfo["selectedPipeline"] =
-    hasImageUrl && !hasSubstantiveRaw
-      ? EnrichPipeline.SCREENSHOT_OPENAI_VISION
-      : hasImageUrl && hasSubstantiveRaw
-        ? EnrichPipeline.SCREENSHOT_TEXT_PRIMARY
-        : EnrichPipeline.PLAIN_TEXT;
   return {
     clipId: row.id,
     url: null,

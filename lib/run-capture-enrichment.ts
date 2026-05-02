@@ -1,3 +1,4 @@
+import { getCaptureKind, isStorageImageUrl } from "@/lib/capture-kind";
 import { describeCaptureEnrichBranch } from "@/lib/captures-enrich-pipeline";
 import {
   CAPTURES_ENRICH_FETCH_SELECT,
@@ -135,6 +136,7 @@ export async function runCaptureEnrichment(
     const branch = describeCaptureEnrichBranch({
       id: row.id,
       url: row.url,
+      capture_type: row.capture_type,
       raw_text: row.raw_text,
       image_url: row.image_url,
     });
@@ -142,12 +144,26 @@ export async function runCaptureEnrichment(
 
     const urlTrimmedForLog = String(row.url ?? "").trim();
     const hasImageUrlForLog = Boolean(row.image_url?.trim());
+    const route = getCaptureKind({
+      capture_type: row.capture_type,
+      url: row.url,
+      image_url: row.image_url,
+      raw_text: row.raw_text,
+    });
     console.log("ENRICHMENT_ROUTING_FINAL", {
       id: captureId,
       url: row.url ?? null,
       source_type: row.source ?? null,
       capture_type: row.capture_type ?? null,
       image_url: row.image_url ?? null,
+      selectedPipeline: branch.selectedPipeline,
+    });
+    console.log("CAPTURE_CLASSIFICATION_FINAL", {
+      id: captureId,
+      url: row.url ?? null,
+      image_url: row.image_url ?? null,
+      ["isImageUrl(url)"]: isStorageImageUrl(urlTrimmedForLog),
+      captureKind: route.kind,
       selectedPipeline: branch.selectedPipeline,
     });
 
@@ -169,10 +185,10 @@ export async function runCaptureEnrichment(
     }
 
     const urlTrimmed = urlTrimmedForLog;
-    const hasUrl = Boolean(urlTrimmed);
     const hasImage = hasImageUrlForLog;
+    const hasArticleUrl = route.kind === "url";
     const timeoutMs =
-      hasImage || hasUrl
+      hasImage || hasArticleUrl
         ? Math.max(enrichmentTimeoutMs(), 90_000)
         : enrichmentTimeoutMs();
     const ac = new AbortController();
@@ -187,10 +203,10 @@ export async function runCaptureEnrichment(
           source: row.source,
           user_note: row.user_note,
           capture_type: String(
-            row.capture_type ?? (hasUrl ? "url" : "link")
+            row.capture_type ?? (hasArticleUrl ? "url" : "link")
           ),
-          /** URL clips: preview/screenshot URLs must not influence OpenAI (UI only). */
-          image_url: hasUrl ? null : (row.image_url ?? null),
+          /** Article URL clips: preview images must not influence OpenAI (UI only). */
+          image_url: hasArticleUrl ? null : (row.image_url ?? null),
         },
         { signal: ac.signal }
       );
@@ -206,8 +222,18 @@ export async function runCaptureEnrichment(
         status: "ready",
         last_enrichment_pipeline: enriched.last_enrichment_pipeline,
       };
-      if (hasUrl) {
+      if (hasArticleUrl) {
         updatePayload.url_article_text = enriched.url_article_text ?? null;
+      }
+
+      const rowUrl = String(row.url ?? "").trim();
+      const rowImg = String(row.image_url ?? "").trim();
+      if (
+        rowImg &&
+        rowUrl &&
+        (isStorageImageUrl(rowUrl) || rowUrl === rowImg)
+      ) {
+        updatePayload.url = null;
       }
 
       const { data: updated, error: updateError } =
@@ -217,7 +243,7 @@ export async function runCaptureEnrichment(
         throw new Error(updateError.message);
       }
 
-      if (hasUrl) {
+      if (hasArticleUrl) {
         const savedLen =
           typeof enriched.url_article_text === "string"
             ? enriched.url_article_text.length

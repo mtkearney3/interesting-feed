@@ -3,6 +3,16 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  /**
+   * Rabbit Hole masthead: one `background-image` for the header card and the page shell.
+   * Matches DevTools → header inner → Computed → background-image (same angle, stops, hex).
+   */
+  --rabbit-hole-masthead-gradient: linear-gradient(
+    110deg,
+    #1f2a20 0%,
+    #334533 60%,
+    #6b5a22 100%
+  );
 }
 
 @theme inline {
@@ -20,7 +30,7 @@
 }
 
 body {
-  background: var(--background);
+  /* Background: Rabbit Hole gradient on `app/page.tsx` shell; body stays transparent. */
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }

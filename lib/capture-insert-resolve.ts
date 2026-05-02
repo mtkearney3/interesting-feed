@@ -1,4 +1,5 @@
 import type { CaptureType } from "@/lib/capture";
+import { isStorageImageUrl } from "@/lib/capture-kind";
 import {
   normalizeShortcutCaptureBody,
   type ShortcutCaptureNormalized,
@@ -53,8 +54,16 @@ export function resolveCaptureInsertFromBody(
     if (loose?.[0]) trimmedUrl = stripUrlScanTrailingJunk(loose[0]);
   }
 
+  if (trimmedUrl && isStorageImageUrl(trimmedUrl)) {
+    trimmedUrl = "";
+  }
+
   const trimmedRaw = norm.raw_text.trim();
   const trimmedImage = norm.image_url;
+  const imgTrim = (trimmedImage ?? "").trim();
+  if (imgTrim && trimmedUrl && (trimmedUrl === imgTrim || isStorageImageUrl(trimmedUrl))) {
+    trimmedUrl = "";
+  }
 
   let finalSource = norm.source.trim();
   if (trimmedUrl) {
@@ -79,7 +88,12 @@ export function resolveCaptureInsertFromBody(
   const allowedTypes: CaptureType[] = ["link", "url", "text", "screenshot"];
 
   let resolvedType: CaptureType;
-  if (hasUrl) {
+  if (hasImage) {
+    resolvedType =
+      bodyCaptureType === "screenshot"
+        ? "screenshot"
+        : inferCaptureTypeFromContent(true);
+  } else if (hasUrl) {
     resolvedType = "url";
   } else {
     resolvedType = allowedTypes.includes(bodyCaptureType as CaptureType)

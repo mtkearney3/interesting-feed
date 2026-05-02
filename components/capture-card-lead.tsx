@@ -1,4 +1,8 @@
 import type { CaptureRow } from "@/lib/capture";
+import {
+  captureBodyCopySizeClass,
+  captureMetadataTextSizeClass,
+} from "@/lib/capture-ui";
 
 type LeadFields = Pick<
   CaptureRow,
@@ -45,8 +49,8 @@ export function CaptureCardLead(props: LeadFields) {
       <p
         className={
           d
-            ? "text-base leading-relaxed text-zinc-700 dark:text-zinc-200 sm:text-lg"
-            : "line-clamp-3 text-base leading-relaxed text-zinc-600 dark:text-zinc-300 sm:line-clamp-none sm:text-lg"
+            ? `${captureBodyCopySizeClass} text-zinc-700 dark:text-zinc-200`
+            : `line-clamp-3 ${captureBodyCopySizeClass} text-zinc-600 dark:text-zinc-300 sm:line-clamp-none`
         }
       >
         {props.ai_summary}
@@ -54,8 +58,8 @@ export function CaptureCardLead(props: LeadFields) {
       <p
         className={
           d
-            ? "text-base leading-relaxed text-zinc-700 dark:text-zinc-300 sm:text-lg"
-            : "line-clamp-2 text-sm leading-relaxed text-zinc-600 dark:text-zinc-500 sm:line-clamp-none sm:text-zinc-600 dark:sm:text-zinc-400"
+            ? `${captureBodyCopySizeClass} text-zinc-700 dark:text-zinc-300`
+            : `line-clamp-2 ${captureBodyCopySizeClass} text-zinc-600 dark:text-zinc-500 sm:line-clamp-none sm:text-zinc-600 dark:sm:text-zinc-400`
         }
       >
         <span className="font-medium text-zinc-500 dark:text-zinc-500 sm:font-semibold">
@@ -66,8 +70,8 @@ export function CaptureCardLead(props: LeadFields) {
       <div
         className={
           d
-            ? "flex flex-wrap items-center gap-2 text-sm sm:text-base"
-            : "flex flex-wrap items-center gap-1.5 text-sm sm:gap-2 sm:text-xs"
+            ? `flex flex-wrap items-center gap-2 ${captureMetadataTextSizeClass}`
+            : `flex flex-wrap items-center gap-1.5 ${captureMetadataTextSizeClass} sm:gap-2`
         }
       >
         {props.ai_category ? (
@@ -85,8 +89,8 @@ export function CaptureCardLead(props: LeadFields) {
         <p
           className={
             d
-              ? "text-base leading-relaxed text-zinc-700 dark:text-zinc-300 sm:text-lg"
-              : "line-clamp-2 text-sm leading-relaxed text-zinc-600 dark:text-zinc-400 sm:line-clamp-none sm:text-sm"
+              ? `${captureBodyCopySizeClass} text-zinc-700 dark:text-zinc-300`
+              : `line-clamp-2 ${captureBodyCopySizeClass} text-zinc-600 dark:text-zinc-400 sm:line-clamp-none`
           }
         >
           <span className="font-medium text-zinc-500 dark:text-zinc-500 sm:font-semibold">
@@ -102,7 +106,9 @@ export function CaptureCardLead(props: LeadFields) {
     <div>
       {thinking ? (
         <div className="mb-1.5 space-y-1.5" role="status" aria-live="polite">
-          <div className="flex items-center gap-2 text-sm font-medium text-zinc-500 dark:text-zinc-400">
+          <div
+            className={`flex items-center gap-2 ${captureBodyCopySizeClass} font-medium text-zinc-500 dark:text-zinc-400`}
+          >
             <span className="capture-thinking-dots relative flex h-2 w-2 shrink-0">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-violet-400 opacity-35 dark:bg-violet-300" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-violet-500 dark:bg-violet-400" />
@@ -121,7 +127,7 @@ export function CaptureCardLead(props: LeadFields) {
         <div className={`capture-ai-enter ${aiSpacing}`}>
           {props.suppressTitle || props.omitFeedTitle ? null : (
             <h2
-              className={`font-bold leading-snug tracking-tight text-zinc-900 dark:text-zinc-50 ${titleTight ? "text-lg max-sm:mt-0 sm:text-xl" : "text-lg sm:text-xl"}`}
+              className={`font-semibold leading-snug tracking-tight text-zinc-900 dark:text-zinc-50 ${titleTight ? "text-lg max-sm:mt-0 max-md:text-xl sm:text-xl" : "text-lg sm:text-xl max-md:text-xl"}`}
             >
               {props.ai_title}
             </h2>
@@ -132,8 +138,8 @@ export function CaptureCardLead(props: LeadFields) {
         <p
           className={
             d
-              ? "whitespace-pre-wrap text-base leading-relaxed text-zinc-900 dark:text-zinc-100 sm:text-lg"
-              : "line-clamp-5 whitespace-pre-wrap text-base leading-relaxed text-zinc-900 dark:text-zinc-100 sm:line-clamp-none sm:text-lg"
+              ? `whitespace-pre-wrap ${captureBodyCopySizeClass} text-zinc-900 dark:text-zinc-100`
+              : `line-clamp-5 whitespace-pre-wrap ${captureBodyCopySizeClass} text-zinc-900 dark:text-zinc-100 sm:line-clamp-none`
           }
         >
           {props.raw_text ?? "—"}

@@ -8,11 +8,11 @@ type Props = {
 };
 
 const headingClass =
-  "min-w-0 flex-1 text-base font-semibold leading-tight tracking-tight text-[#1f2a20] dark:text-zinc-100 break-words";
+  "min-w-0 flex-1 break-words text-lg font-semibold leading-tight tracking-tight text-[#1f2a20] max-md:text-xl dark:text-zinc-100 sm:text-xl md:text-base";
 
 /** Rounded title card only (no outer masking). */
 const titleBoxClass =
-  "w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 shadow-sm dark:border-zinc-700 dark:bg-zinc-900";
+  "w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 shadow-md dark:border-zinc-700 dark:bg-zinc-800";
 
 const titleRowClass = "flex w-full min-w-0 items-start gap-2";
 

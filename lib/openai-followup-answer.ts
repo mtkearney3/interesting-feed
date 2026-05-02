@@ -257,7 +257,7 @@ export async function answerFollowupQuestion(
     console.log("URL_ANALYSIS_MODE", {
       clipId: ctx.clipId ?? "(no-id)",
       url: ctx.url,
-      mode: "URL_ARTICLE_TEXT_ONLY",
+      mode: "URL_ARTICLE",
       hasPreviewImage,
       sentAnyImageToOpenAI: false,
       usedStoredArticleText: stored.length >= MIN_URL_ARTICLE_CHARS,

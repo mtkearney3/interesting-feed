@@ -3,7 +3,9 @@
 import { ChevronLeft } from "lucide-react";
 import { useCallback, useEffect, useId } from "react";
 import {
+  captureRawTextForDisplay,
   captureStatusDisplay,
+  captureUrlForFeedDisplay,
   formatCaptureDateShort,
   parseFollowupQuestions,
   type CaptureRow,
@@ -13,6 +15,16 @@ import { CaptureFeedTitleBrandDot } from "@/components/capture-sticky-feed-title
 import { CaptureFollowupsPanel } from "@/components/capture-followups-panel";
 import { DeleteCaptureButton } from "@/components/delete-capture-button";
 import { EnrichCaptureButton } from "@/components/enrich-capture-button";
+import {
+  captureBodyCopySizeClass,
+  captureMetadataTextSizeClass,
+  captureSectionLabelSizeClass,
+} from "@/lib/capture-ui";
+import {
+  rabbitHoleMainWidthClass,
+  rabbitHolePageShellClass,
+  rabbitHolePageShellStyle,
+} from "@/lib/rabbit-hole-layout";
 
 type Props = {
   capture: CaptureRow | null;
@@ -47,22 +59,29 @@ export function CaptureDetailModal({ capture, onClose }: Props) {
   const presetFollowups = hasAi
     ? parseFollowupQuestions(c.ai_followup_questions)
     : [];
+  const displayRaw = captureRawTextForDisplay(c.raw_text, c.image_url);
+  const displayUrl = captureUrlForFeedDisplay(c);
   const hasMetaExtra =
-    Boolean(c.user_note?.trim()) || (hasAi && Boolean(c.raw_text?.trim()));
+    Boolean(c.user_note?.trim()) || (hasAi && Boolean(displayRaw?.trim()));
   const hasImage = Boolean(c.image_url);
 
   const headerTitle =
     hasAi && c.ai_title?.trim()
       ? c.ai_title.trim()
-      : c.raw_text?.trim()
-        ? c.raw_text.trim().slice(0, 120) +
-          (c.raw_text.trim().length > 120 ? "…" : "")
-        : "Clip";
+      : displayRaw?.trim()
+        ? displayRaw.trim().slice(0, 120) +
+          (displayRaw.trim().length > 120 ? "…" : "")
+        : hasImage
+          ? "Screenshot"
+          : "Clip";
 
   return (
-    <div className="fixed inset-0 z-[100] flex flex-col sm:items-center sm:justify-center sm:p-6">
+    <div
+      className={`fixed inset-0 z-[100] flex flex-col sm:items-center sm:justify-center sm:p-6 ${rabbitHolePageShellClass}`}
+      style={rabbitHolePageShellStyle}
+    >
       <div
-        className="absolute inset-0 bg-zinc-950/55 dark:bg-black/70"
+        className="absolute inset-0 bg-black/25 dark:bg-black/30"
         aria-hidden
         onClick={onClose}
       />
@@ -71,11 +90,12 @@ export function CaptureDetailModal({ capture, onClose }: Props) {
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="relative z-10 flex h-full max-h-full min-h-0 w-full flex-1 flex-col overflow-hidden bg-zinc-200 shadow-2xl dark:bg-zinc-900 sm:h-auto sm:max-h-[min(90vh,880px)] sm:max-w-2xl sm:flex-none sm:rounded-2xl sm:ring-1 sm:ring-zinc-200/80 dark:sm:ring-zinc-800"
+        className="relative z-10 flex h-full max-h-full min-h-0 w-full flex-1 flex-col overflow-hidden bg-transparent shadow-none sm:h-auto sm:max-h-[min(90vh,880px)] sm:max-w-2xl sm:flex-none sm:rounded-2xl sm:shadow-2xl sm:ring-1 sm:ring-zinc-200/80 dark:sm:ring-zinc-800"
       >
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-          <header className="sticky top-0 z-50 bg-transparent px-3 pt-0 pb-0 sm:px-5">
-            <div className="flex w-full items-start gap-3 rounded-2xl border border-zinc-200/70 bg-white px-3 py-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-none">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-transparent">
+          <div className={`${rabbitHoleMainWidthClass} pt-3`}>
+            <header className="sticky top-0 z-50 bg-transparent px-3 pt-0 pb-0 sm:px-5">
+              <div className="flex w-full items-start gap-3 rounded-2xl border border-zinc-200/70 bg-white px-3 py-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-none">
               <button
                 type="button"
                 onClick={onClose}
@@ -95,7 +115,9 @@ export function CaptureDetailModal({ capture, onClose }: Props) {
                       >
                         {headerTitle}
                       </h1>
-                      <p className="mt-0.5 text-[11px] text-zinc-400 dark:text-zinc-500">
+                      <p
+                        className={`mt-0.5 ${captureMetadataTextSizeClass} text-zinc-400 dark:text-zinc-500`}
+                      >
                         <time dateTime={c.created_at} className="tabular-nums">
                           {formatCaptureDateShort(c.created_at)}
                         </time>
@@ -109,8 +131,9 @@ export function CaptureDetailModal({ capture, onClose }: Props) {
                   </div>
                 </div>
               </div>
-            </div>
-          </header>
+              </div>
+            </header>
+          </div>
 
           <div className="mt-3 px-3 pb-4 sm:px-5 sm:pb-6">
             <div className="flex flex-col rounded-2xl border border-zinc-200/80 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 sm:p-5">
@@ -129,7 +152,7 @@ export function CaptureDetailModal({ capture, onClose }: Props) {
               >
                 <CaptureCardLead
                   status={c.status}
-                  raw_text={c.raw_text}
+                  raw_text={hasImage ? displayRaw : c.raw_text}
                   ai_title={c.ai_title}
                   ai_summary={c.ai_summary}
                   ai_why_interesting={c.ai_why_interesting}
@@ -141,15 +164,15 @@ export function CaptureDetailModal({ capture, onClose }: Props) {
                   suppressTitle={hasAi}
                 />
 
-                {c.url ? (
-                  <p className="min-w-0 break-words text-base">
+                {displayUrl ? (
+                  <p className={`min-w-0 break-words ${captureBodyCopySizeClass}`}>
                     <a
-                      href={c.url}
+                      href={displayUrl}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="font-medium text-sky-700 underline decoration-sky-700/30 underline-offset-2 hover:decoration-sky-700 dark:text-sky-400 dark:decoration-sky-400/30"
                     >
-                      {c.url}
+                      {displayUrl}
                     </a>
                   </p>
                 ) : null}
@@ -163,10 +186,14 @@ export function CaptureDetailModal({ capture, onClose }: Props) {
 
                 {hasMetaExtra ? (
                   <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-3 dark:border-zinc-800 dark:bg-zinc-900/80">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                    <p
+                      className={`${captureSectionLabelSizeClass} text-zinc-500 dark:text-zinc-400`}
+                    >
                       Note &amp; original text
                     </p>
-                    <div className="mt-2 space-y-3 border-t border-zinc-200 pt-3 text-sm leading-relaxed text-zinc-700 dark:border-zinc-800 dark:text-zinc-300">
+                    <div
+                      className={`mt-2 space-y-3 border-t border-zinc-200 pt-3 ${captureBodyCopySizeClass} text-zinc-700 dark:border-zinc-800 dark:text-zinc-300`}
+                    >
                       <p>
                         <span className="font-semibold text-zinc-600 dark:text-zinc-400">
                           Note:{" "}
@@ -181,7 +208,7 @@ export function CaptureDetailModal({ capture, onClose }: Props) {
                             Original:{" "}
                           </span>
                           <span className="whitespace-pre-wrap">
-                            {c.raw_text?.trim() ? c.raw_text : "—"}
+                            {displayRaw?.trim() ? displayRaw : "—"}
                           </span>
                         </p>
                       ) : null}

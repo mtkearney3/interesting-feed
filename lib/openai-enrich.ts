@@ -1,3 +1,9 @@
+import {
+  getCaptureKind,
+  isExternalArticleUrl,
+  isStorageImageUrl,
+  stripStorageUrlsFromRawText,
+} from "@/lib/capture-kind";
 import { EnrichPipeline } from "@/lib/captures-enrich-pipeline";
 import {
   extractUrlArticleCapture,
@@ -60,6 +66,33 @@ function openAiFetchTimeoutMs(preferLong: boolean): number {
 
 function substantiveRawText(raw: string | null): boolean {
   return Boolean(raw && raw.trim().length >= 100);
+}
+
+/** Avoid `JSON.stringify` / OpenAI rejecting bodies with lone UTF-16 surrogates. */
+function stripLoneSurrogates(str: string): string {
+  let out = "";
+  for (let i = 0; i < str.length; i++) {
+    const c = str.charCodeAt(i);
+    if (c >= 0xd800 && c <= 0xdbff) {
+      const lo = str.charCodeAt(i + 1);
+      if (lo >= 0xdc00 && lo <= 0xdfff) {
+        out += str.slice(i, i + 2);
+        i++;
+      } else {
+        out += "\uFFFD";
+      }
+    } else if (c >= 0xdc00 && c <= 0xdfff) {
+      out += "\uFFFD";
+    } else {
+      out += str[i] ?? "";
+    }
+  }
+  return out;
+}
+
+function safeJsonField(s: string | null | undefined): string | null {
+  if (s == null) return null;
+  return stripLoneSurrogates(s);
 }
 
 type ChatMessage =
@@ -134,7 +167,7 @@ function parseEnrichmentJson(raw: string): EnrichmentResult {
     ai_insight_score: clampScore(scoreRaw),
     ai_followup_questions: asStringArray(followRaw),
     ai_related_notes: related || null,
-    last_enrichment_pipeline: EnrichPipeline.PLAIN_TEXT,
+    last_enrichment_pipeline: EnrichPipeline.TEXT_ONLY,
     url_article_text: null,
   };
 }
@@ -188,8 +221,7 @@ function insufficientUrlArticleEnrichment(
     ai_related_notes: reason
       ? `[url-article] ${reason}`
       : "[url-article] insufficient_extracted_text",
-    last_enrichment_pipeline:
-      EnrichPipeline.URL_ARTICLE_TEXT_ONLY_INSUFFICIENT,
+    last_enrichment_pipeline: EnrichPipeline.URL_ARTICLE_INSUFFICIENT,
     url_article_text: null,
   };
 }
@@ -353,7 +385,29 @@ export async function enrichUrlClipTextOnly(
     throw new Error("OPENAI_API_KEY is not set");
   }
 
+  const route = getCaptureKind({
+    capture_type: capture.capture_type,
+    url: capture.url,
+    image_url: capture.image_url,
+    raw_text: capture.raw_text,
+  });
+  if (route.kind !== "url" || route.pipeline !== "URL_ARTICLE_TEXT_ONLY") {
+    throw new Error(
+      "ENRICH_URL_ARTICLE_ASSERT: enrichUrlClipTextOnly requires URL_ARTICLE_TEXT_ONLY kind"
+    );
+  }
+  if (capture.image_url?.trim()) {
+    throw new Error(
+      "ENRICH_URL_ARTICLE_ASSERT: URL article path must not send image_url to OpenAI"
+    );
+  }
   const trimmedUrl = capture.url!.trim();
+  if (isStorageImageUrl(trimmedUrl)) {
+    throw new Error(
+      "ENRICH_URL_ARTICLE_ASSERT: url must not be a storage or raster asset URL"
+    );
+  }
+
   const fetchSignal =
     options?.signal ??
     AbortSignal.timeout(openAiFetchTimeoutMs(true));
@@ -375,7 +429,7 @@ export async function enrichUrlClipTextOnly(
   console.log("URL_ANALYSIS_MODE", {
     clipId: capture.id ?? "(no-id)",
     url: capture.url,
-    mode: "URL_ARTICLE_TEXT_ONLY",
+    mode: "URL_ARTICLE",
     previewImageIgnoredForEnrichment: true,
     sentAnyImageToOpenAI: false,
     extractedTitle: extracted.title,
@@ -443,6 +497,18 @@ export async function enrichUrlClipTextOnly(
   });
   assertUrlArticleOpenAiPayloadNoImageApi(outbound);
 
+  console.log("URL_ARTICLE_OPENAI_PREFLIGHT", {
+    clipId: capture.id ?? "(no-id)",
+    selectedPipeline: EnrichPipeline.URL_ARTICLE_TEXT_ONLY,
+    url: trimmedUrl,
+    hasImageUrl: Boolean(capture.image_url?.trim()),
+  });
+  if (capture.image_url?.trim()) {
+    throw new Error(
+      "ENRICH_URL_ARTICLE_ASSERT: no image input before URL article OpenAI call"
+    );
+  }
+
   const raw = await chatCompletionsEnrichmentJson(
     system,
     userContent,
@@ -468,9 +534,19 @@ async function enrichNonUrlCaptureWithOpenAI(
   capture: CaptureEnrichInput,
   options?: { signal?: AbortSignal }
 ): Promise<EnrichmentResult> {
-  if (capture.url?.trim()) {
+  const kRoute = getCaptureKind(capture);
+  if (kRoute.kind === "url") {
+    throw new Error(
+      "ENRICH_ROUTER_LEAK: enrichNonUrlCaptureWithOpenAI received URL_ARTICLE capture"
+    );
+  }
+
+  const urlT = capture.url?.trim() ?? "";
+  const imgTrim = capture.image_url?.trim() ?? "";
+  const hasImage = Boolean(imgTrim);
+  if (urlT && isExternalArticleUrl(urlT) && !hasImage) {
     const msg =
-      "ENRICH_PIPELINE_LEAK: URL clip entered enrichNonUrlCaptureWithOpenAI (vision/plain path)";
+      "ENRICH_PIPELINE_LEAK: external article URL entered enrichNonUrlCaptureWithOpenAI (vision/plain path)";
     console.error(msg, {
       clipId: capture.id ?? "(no-id)",
       url: capture.url,
@@ -484,23 +560,20 @@ async function enrichNonUrlCaptureWithOpenAI(
   }
 
   const model = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
-  const hasImage = Boolean(capture.image_url?.trim());
-  const hasSubstantiveRaw = substantiveRawText(capture.raw_text);
+  const sanitizedRaw = stripStorageUrlsFromRawText(
+    capture.raw_text,
+    hasImage ? imgTrim : null
+  );
+  const hasSubstantiveSanitized = substantiveRawText(sanitizedRaw);
+  const useVisionImage =
+    kRoute.kind === "image" && kRoute.useOpenAiVision;
 
   const fetchSignal =
     options?.signal ??
     AbortSignal.timeout(openAiFetchTimeoutMs(hasImage));
 
-  const useVisionImage = hasImage && !hasSubstantiveRaw;
-
-  const jsonPayload = {
-    raw_text: capture.raw_text,
-    url: capture.url,
-    source: capture.source,
-    user_note: capture.user_note,
-    capture_type: capture.capture_type,
-    has_image: hasImage,
-  };
+  const urlForPayload =
+    urlT && !isStorageImageUrl(urlT) ? safeJsonField(capture.url) : null;
 
   let systemContent =
     "You enrich user captures for a personal reading feed. " +
@@ -513,12 +586,56 @@ async function enrichNonUrlCaptureWithOpenAI(
     "Be specific to the provided content; avoid generic filler.";
 
   if (useVisionImage) {
+    systemContent =
+      "You analyze screenshot images for a personal reading feed. " +
+      "Respond with a single JSON object only (no markdown). Use exactly these keys: " +
+      "title (short headline), summary (2-4 sentences), whyInteresting (1-2 sentences), " +
+      "category (short label like science, business, tools, culture), " +
+      "insightScore (integer 1-10 for how thought-provoking or useful it is), " +
+      "followUpQuestions (array of 2-4 concise strings the reader might explore next). " +
+      "All keys are required; followUpQuestions may be an empty array only if impossible. " +
+      "Base every claim on what is visible in the attached image (text, UI, charts, people, etc.). " +
+      "Do not describe, summarize, or speculate from URLs, file paths, or storage links—those are not the content.";
+  } else if (hasImage) {
     systemContent +=
-      " When an image is attached, summary must describe what appears in the image (visible text, UI, people, charts, etc.) and connect it to raw_text and any user note. Be concrete about the screenshot.";
+      " A reference image exists for UI context only in this turn; prioritize the user's saved text. Do not treat storage or image URLs as the subject of analysis.";
   }
 
+  systemContent = stripLoneSurrogates(systemContent);
+
+  const jsonPayload = {
+    raw_text: safeJsonField(
+      hasImage ? sanitizedRaw : (capture.raw_text ?? "").trim() || null
+    ),
+    url: hasImage ? null : urlForPayload,
+    source: safeJsonField(capture.source),
+    user_note: safeJsonField(capture.user_note),
+    capture_type: stripLoneSurrogates(capture.capture_type),
+    has_image: hasImage,
+  };
+
   let userText: string;
-  if (hasSubstantiveRaw) {
+  if (useVisionImage) {
+    const parts = [
+      "Analyze the screenshot image attached in this message.",
+      "Describe what is visible and why it might be interesting or useful. Do not discuss Supabase, storage, signed URLs, or any link string—only the pixels in the image.",
+    ];
+    const note = (safeJsonField(capture.user_note) ?? "").trim();
+    if (note) {
+      parts.push(`Optional saver note (not a URL to fetch):\n${note}`);
+    }
+    const ctx = stripLoneSurrogates(sanitizedRaw).trim();
+    if (ctx) {
+      parts.push(
+        `Optional typed context from the saver (ignore if it is only paths or URLs already removed from analysis):\n${ctx}`
+      );
+    }
+    userText = parts.join("\n\n");
+  } else if (hasSubstantiveSanitized && hasImage) {
+    userText =
+      "Analyze the user's saved text (primary). A reference image exists for the app UI only—do not anchor your analysis on any URL or storage link string.\n\n" +
+      JSON.stringify(jsonPayload);
+  } else if (hasSubstantiveSanitized) {
     userText =
       "Analyze the user's saved text (primary). Ignore any empty image slot.\n\n" +
       JSON.stringify(jsonPayload);
@@ -526,15 +643,17 @@ async function enrichNonUrlCaptureWithOpenAI(
     userText = JSON.stringify(jsonPayload);
   }
 
+  const imageUrlForApi = stripLoneSurrogates(imgTrim);
+
   const userMessage = useVisionImage
     ? {
         role: "user" as const,
         content: [
-          { type: "text" as const, text: userText },
+          { type: "text" as const, text: stripLoneSurrogates(userText) },
           {
             type: "image_url" as const,
             image_url: {
-              url: capture.image_url!.trim(),
+              url: imageUrlForApi,
               detail: "high" as const,
             },
           },
@@ -542,8 +661,43 @@ async function enrichNonUrlCaptureWithOpenAI(
       }
     : {
         role: "user" as const,
-        content: userText,
+        content: stripLoneSurrogates(userText),
       };
+
+  const selectedPipelineForLog = useVisionImage
+    ? EnrichPipeline.IMAGE_VISION
+    : hasImage
+      ? EnrichPipeline.IMAGE_SCREENSHOT_TEXT_PRIMARY
+      : EnrichPipeline.TEXT_ONLY;
+
+  if (useVisionImage) {
+    const promptIncludesImageUrlAsText =
+      Boolean(imgTrim && userText.includes(imgTrim)) ||
+      /supabase\.co\/storage/i.test(userText) ||
+      /\/storage\/v1\/object\//i.test(userText);
+    console.log("IMAGE_OPENAI_PREFLIGHT", {
+      id: capture.id ?? null,
+      capture_type: capture.capture_type,
+      source_type: capture.source,
+      url: capture.url ?? null,
+      image_url: capture.image_url ?? null,
+      selectedPipeline: selectedPipelineForLog,
+      promptIncludesImageUrlAsText,
+    });
+    if (selectedPipelineForLog !== EnrichPipeline.IMAGE_VISION) {
+      throw new Error(
+        "ENRICH_IMAGE_ASSERT: selectedPipeline must be IMAGE_VISION before vision OpenAI call"
+      );
+    }
+    if (!imgTrim) {
+      throw new Error("ENRICH_IMAGE_ASSERT: image_url required for IMAGE_VISION");
+    }
+    if (promptIncludesImageUrlAsText) {
+      throw new Error(
+        "ENRICH_IMAGE_ASSERT: user prompt must not include Supabase/storage URL as text"
+      );
+    }
+  }
 
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -581,10 +735,10 @@ async function enrichNonUrlCaptureWithOpenAI(
 
   const parsed = parseEnrichmentJson(raw);
   parsed.last_enrichment_pipeline = useVisionImage
-    ? EnrichPipeline.SCREENSHOT_OPENAI_VISION
+    ? EnrichPipeline.IMAGE_VISION
     : hasImage
-      ? EnrichPipeline.SCREENSHOT_TEXT_PRIMARY
-      : EnrichPipeline.PLAIN_TEXT;
+      ? EnrichPipeline.IMAGE_SCREENSHOT_TEXT_PRIMARY
+      : EnrichPipeline.TEXT_ONLY;
   return parsed;
 }
 
@@ -592,41 +746,79 @@ export async function enrichCaptureWithOpenAI(
   capture: CaptureEnrichInput,
   options?: { signal?: AbortSignal }
 ): Promise<EnrichmentResult> {
-  const trimmedUrl = capture.url?.trim() ?? "";
-  if (trimmedUrl) {
-    const hadImageForUi = Boolean(
-      capture.image_url?.trim() || capture.screenshot_url?.trim()
+  const k = getCaptureKind({
+    capture_type: capture.capture_type,
+    url: capture.url,
+    image_url: capture.image_url,
+    raw_text: capture.raw_text,
+  });
+
+  if (k.kind === "image") {
+    const img = capture.image_url!.trim();
+    console.log("ENRICH_PIPELINE_RUNTIME", {
+      clipId: capture.id ?? "(no-id)",
+      url: null,
+      isUrlCapture: false,
+      hasImageUrl: true,
+      hasScreenshotImage: Boolean(capture.screenshot_url?.trim()),
+      captureKind: k.kind,
+      selectedPipeline: k.pipeline,
+      selectedFunctionName: "enrichNonUrlCaptureWithOpenAI",
+    });
+    return enrichNonUrlCaptureWithOpenAI(
+      { ...capture, url: null, image_url: img },
+      options
     );
+  }
+
+  if (k.kind === "url") {
+    if (capture.image_url?.trim()) {
+      throw new Error(
+        "ENRICH_ROUTER: URL article path must not receive image_url"
+      );
+    }
+    if (!k.articleUrl || isStorageImageUrl(k.articleUrl)) {
+      throw new Error(
+        "ENRICH_ROUTER: URL_ARTICLE_TEXT_ONLY requires a non-storage article URL"
+      );
+    }
     console.log("URL_CAPTURE_FINAL_ROUTING", {
       clipId: capture.id ?? "(no-id)",
       hasUrl: true,
-      hasImageUrl: hadImageForUi,
+      hasImageUrl: false,
+      captureKind: k.kind,
       selectedPipeline: EnrichPipeline.URL_ARTICLE_TEXT_ONLY,
     });
 
-    const urlOnlyCapture: CaptureEnrichInput = {
-      ...capture,
-      url: trimmedUrl,
-      image_url: null,
-      screenshot_url: null,
-      capture_type: "url",
-    };
-    return enrichUrlClipTextOnly(urlOnlyCapture, options);
+    return enrichUrlClipTextOnly(
+      {
+        ...capture,
+        url: k.articleUrl,
+        image_url: null,
+        screenshot_url: null,
+        capture_type: "url",
+      },
+      options
+    );
   }
 
   console.log("ENRICH_PIPELINE_RUNTIME", {
     clipId: capture.id ?? "(no-id)",
     url: capture.url ?? null,
     isUrlCapture: false,
-    hasImageUrl: Boolean(capture.image_url?.trim()),
+    hasImageUrl: false,
     hasScreenshotImage: Boolean(capture.screenshot_url?.trim()),
-    selectedPipeline:
-      capture.image_url?.trim() && !substantiveRawText(capture.raw_text)
-        ? EnrichPipeline.SCREENSHOT_OPENAI_VISION
-        : capture.image_url?.trim()
-          ? EnrichPipeline.SCREENSHOT_TEXT_PRIMARY
-          : EnrichPipeline.PLAIN_TEXT,
+    captureKind: k.kind,
+    selectedPipeline: EnrichPipeline.TEXT_ONLY,
     selectedFunctionName: "enrichNonUrlCaptureWithOpenAI",
   });
-  return enrichNonUrlCaptureWithOpenAI(capture, options);
+
+  const urlT = String(capture.url ?? "").trim();
+  return enrichNonUrlCaptureWithOpenAI(
+    {
+      ...capture,
+      url: urlT && isStorageImageUrl(urlT) ? null : capture.url,
+    },
+    options
+  );
 }

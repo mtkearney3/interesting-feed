@@ -1,7 +1,16 @@
+import { isStorageImageUrl } from "@/lib/capture-kind";
+
 /**
  * Normalizes iPhone Shortcut / bookmarklet payloads into fields for `captures` insert.
  * Does not run enrichment or OpenAI.
  */
+
+function acceptArticleUrl(candidate: string | null | undefined): string {
+  const u = (candidate ?? "").trim();
+  if (!u) return "";
+  if (isStorageImageUrl(u)) return "";
+  return u;
+}
 
 function stripTrailingJunkFromUrl(u: string): string {
   return u.replace(/[)\].,;:]+$/g, "").trim();
@@ -53,6 +62,9 @@ function deepFindFirstHttpUrl(
   if (typeof v === "object") {
     const o = v as Record<string, unknown>;
     for (const k of Object.keys(o)) {
+      if (/^(image_url|thumbnail|previewimage|screenshot_url)$/i.test(k)) {
+        continue;
+      }
       const u = deepFindFirstHttpUrl(o[k], depth + 1, maxDepth, maxStringLen);
       if (u) return u;
     }
@@ -79,7 +91,7 @@ function extractUrlFromBody(body: Record<string, unknown>): string {
   ] as const;
   for (const k of directKeys) {
     if (!(k in body)) continue;
-    const u = urlFromScalar(body[k]);
+    const u = acceptArticleUrl(urlFromScalar(body[k]));
     if (u) return u;
   }
 
@@ -91,7 +103,7 @@ function extractUrlFromBody(body: Record<string, unknown>): string {
     "title",
   ] as const;
   for (const k of textKeys) {
-    const u = urlFromScalar(body[k]);
+    const u = acceptArticleUrl(urlFromScalar(body[k]));
     if (u) return u;
   }
 
@@ -99,26 +111,28 @@ function extractUrlFromBody(body: Record<string, unknown>): string {
   if (Array.isArray(items) && items.length > 0) {
     const i0 = items[0];
     if (typeof i0 === "string") {
-      const u = urlFromScalar(i0);
+      const u = acceptArticleUrl(urlFromScalar(i0));
       if (u) return u;
     } else if (i0 && typeof i0 === "object") {
       const o = i0 as Record<string, unknown>;
       for (const k of ["url", "link", "href", "webpageURL", "uri"]) {
-        const u = urlFromScalar(o[k]);
+        const u = acceptArticleUrl(urlFromScalar(o[k]));
         if (u) return u;
       }
-      const u = firstHttpUrlInString(JSON.stringify(i0));
+      const u = acceptArticleUrl(firstHttpUrlInString(JSON.stringify(i0)));
       if (u) return u;
     }
   }
 
   const attachments = body.attachments;
   if (Array.isArray(attachments) && attachments[0] && typeof attachments[0] === "object") {
-    const u = urlFromScalar((attachments[0] as Record<string, unknown>).url);
+    const u = acceptArticleUrl(
+      urlFromScalar((attachments[0] as Record<string, unknown>).url)
+    );
     if (u) return u;
   }
 
-  const deep = deepFindFirstHttpUrl(body, 0, 8, 48_000);
+  const deep = acceptArticleUrl(deepFindFirstHttpUrl(body, 0, 8, 48_000));
   return deep ?? "";
 }
 

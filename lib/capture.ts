@@ -1,14 +1,11 @@
+import {
+  captureRawTextForDisplay,
+  captureUrlForDisplay,
+  getCaptureKind,
+} from "@/lib/capture-kind";
+
 export const CAPTURE_TYPES = ["text", "link", "url", "screenshot"] as const;
 export type CaptureType = (typeof CAPTURE_TYPES)[number];
-
-/** Feed badge: any row with a saved URL is shown as a link clip, not screenshot. */
-export function feedCaptureTypeDisplay(
-  c: Pick<CaptureRow, "url" | "capture_type">
-): string {
-  if (c.url?.trim()) return "link";
-  const t = String(c.capture_type ?? "").trim();
-  return t || "—";
-}
 
 export const CAPTURE_STATUSES = [
   "raw",
@@ -40,6 +37,24 @@ export type CaptureRow = {
   status: CaptureStatus | string | null;
   created_at: string;
 };
+
+export { captureRawTextForDisplay, captureUrlForDisplay, getCaptureKind };
+
+/** @deprecated Use {@link captureUrlForDisplay} from `@/lib/capture-kind`. */
+export function captureUrlForFeedDisplay(
+  c: Pick<CaptureRow, "url" | "image_url" | "capture_type">
+): string | null {
+  return captureUrlForDisplay(c);
+}
+
+/** Feed badge: link only when there is a real external URL to open. */
+export function feedCaptureTypeDisplay(
+  c: Pick<CaptureRow, "url" | "capture_type" | "image_url">
+): string {
+  if (captureUrlForDisplay(c)) return "link";
+  const t = String(c.capture_type ?? "").trim();
+  return t || "—";
+}
 
 export function parseFollowupQuestions(value: unknown): string[] {
   if (!Array.isArray(value)) return [];

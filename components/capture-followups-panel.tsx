@@ -3,13 +3,15 @@
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { useCallback, useState, type ReactNode } from "react";
 import type { FollowupStructuredResponse } from "@/lib/openai-followup-answer";
+import {
+  captureBodyCopySizeClass,
+  captureSectionLabelSizeClass,
+} from "@/lib/capture-ui";
 
-const followUpQuestionBtnClass =
-  "group flex w-full items-center justify-between gap-2 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-left text-[15px] font-medium text-blue-700 transition hover:bg-blue-100 active:scale-[0.98] dark:border-blue-900/45 dark:bg-blue-950/40 dark:text-blue-200 dark:hover:bg-blue-950/60";
+const followUpQuestionBtnClass = `group flex w-full items-center justify-between gap-2 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-left ${captureBodyCopySizeClass} font-medium text-blue-700 transition hover:bg-blue-100 active:scale-[0.98] dark:border-blue-900/45 dark:bg-blue-950/40 dark:text-blue-200 dark:hover:bg-blue-950/60`;
 
 /** Suggested follow-ups inside an answer card (not preset list). */
-const keepGoingQuestionBtnClass =
-  "flex w-full items-center justify-between rounded-xl border border-blue-100 bg-white px-3 py-2 text-left text-sm font-medium text-blue-600 transition active:scale-[0.98] dark:border-blue-900/40 dark:bg-zinc-950 dark:text-blue-300";
+const keepGoingQuestionBtnClass = `flex w-full items-center justify-between rounded-xl border border-blue-100 bg-white px-3 py-2 text-left ${captureBodyCopySizeClass} font-medium text-blue-600 transition active:scale-[0.98] dark:border-blue-900/40 dark:bg-zinc-950 dark:text-blue-300`;
 
 type Props = {
   captureId: string;
@@ -43,10 +45,8 @@ function AnswerUnderQuestion({
   const state = answersByKey[answerKey];
   if (!state) return null;
 
-  const loadingShell =
-    "rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-200";
-  const loadingShellNested =
-    "mt-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2.5 text-sm text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-200";
+  const loadingShell = `rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 ${captureBodyCopySizeClass} text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-200`;
+  const loadingShellNested = `mt-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2.5 ${captureBodyCopySizeClass} text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-200`;
 
   if (state.loading) {
     return (
@@ -56,10 +56,8 @@ function AnswerUnderQuestion({
     );
   }
 
-  const errorShell =
-    "rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-200";
-  const errorShellNested =
-    "mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-200";
+  const errorShell = `rounded-xl border border-red-200 bg-red-50 px-4 py-3 ${captureBodyCopySizeClass} text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-200`;
+  const errorShellNested = `mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 ${captureBodyCopySizeClass} text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-200`;
 
   if (state.error) {
     return (
@@ -76,7 +74,9 @@ function AnswerUnderQuestion({
   const keepGoing =
     followUps.length > 0 ? (
       <div className="mt-4 border-t border-zinc-100 pt-3 dark:border-zinc-700/80">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
+        <p
+          className={`mb-2 ${captureSectionLabelSizeClass} text-zinc-400 dark:text-zinc-500`}
+        >
           Keep going
         </p>
         <div className="space-y-2">
@@ -90,7 +90,9 @@ function AnswerUnderQuestion({
                   className={keepGoingQuestionBtnClass}
                   onClick={() => onQuestionRowClick(childKey, fu)}
                 >
-                  <span className="min-w-0 flex-1 leading-snug">{fu}</span>
+                  <span className={`min-w-0 flex-1 ${captureBodyCopySizeClass}`}>
+                    {fu}
+                  </span>
                   {childOpen ? (
                     <ChevronDown
                       className="h-4 w-4 shrink-0 text-blue-400 dark:text-blue-400"
@@ -120,7 +122,9 @@ function AnswerUnderQuestion({
 
   if (nested) {
     return (
-      <div className="mt-2 rounded-lg border border-zinc-100 bg-zinc-50/90 px-3 py-3 text-sm leading-relaxed text-zinc-700 shadow-inner dark:border-zinc-700 dark:bg-zinc-800/50 dark:text-zinc-300">
+      <div
+        className={`mt-2 rounded-lg border border-zinc-100 bg-zinc-50/90 px-3 py-3 ${captureBodyCopySizeClass} text-zinc-700 shadow-inner dark:border-zinc-700 dark:bg-zinc-800/50 dark:text-zinc-300`}
+      >
         <span className="whitespace-pre-wrap">{answer}</span>
         {keepGoing}
       </div>
@@ -128,7 +132,9 @@ function AnswerUnderQuestion({
   }
 
   return (
-    <div className="ml-3 rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm leading-relaxed text-zinc-700 shadow-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
+    <div
+      className={`ml-3 rounded-xl border border-zinc-200 bg-white px-4 py-3 ${captureBodyCopySizeClass} text-zinc-700 shadow-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300`}
+    >
       <span className="whitespace-pre-wrap">{answer}</span>
       {keepGoing}
     </div>
@@ -252,7 +258,9 @@ export function CaptureFollowupsPanel({
     <div className="mt-2 space-y-2.5 border-t border-zinc-200/80 pt-2.5 dark:border-zinc-800 sm:mt-4 sm:space-y-4 sm:pt-4">
       {presetQuestions.length > 0 ? (
         <div>
-          <p className="text-sm font-semibold uppercase tracking-wide text-zinc-500 sm:text-xs">
+          <p
+            className={`${captureSectionLabelSizeClass} text-zinc-500 dark:text-zinc-500`}
+          >
             Follow-up questions
           </p>
           <ul className="mt-2 space-y-2">
@@ -266,7 +274,7 @@ export function CaptureFollowupsPanel({
                     onClick={() => handleQuestionRowClick(answerKey, question)}
                     className={followUpQuestionBtnClass}
                   >
-                    <span className="min-w-0 flex-1 leading-snug">
+                    <span className={`min-w-0 flex-1 ${captureBodyCopySizeClass}`}>
                       {question}
                     </span>
                     {isOpen ? (
@@ -296,7 +304,9 @@ export function CaptureFollowupsPanel({
       ) : null}
 
       <div className="space-y-1.5 sm:space-y-2">
-        <p className="text-sm font-semibold uppercase tracking-wide text-zinc-500 sm:text-xs">
+        <p
+          className={`${captureSectionLabelSizeClass} text-zinc-500 dark:text-zinc-500`}
+        >
           Your question
         </p>
         <div className="flex w-full items-center rounded-xl border border-blue-200 bg-white px-3 py-2 shadow-sm transition focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 dark:border-blue-900/40 dark:bg-zinc-900 dark:focus-within:border-blue-500 dark:focus-within:ring-blue-950/40">
@@ -312,13 +322,13 @@ export function CaptureFollowupsPanel({
               }
             }}
             placeholder="Ask your own follow-up..."
-            className="min-w-0 flex-1 border-0 bg-transparent py-1 text-sm text-blue-700 outline-none placeholder:text-gray-400 dark:text-blue-300 dark:placeholder:text-zinc-500"
+            className={`min-w-0 flex-1 border-0 bg-transparent py-1 ${captureBodyCopySizeClass} text-blue-700 outline-none placeholder:text-gray-400 dark:text-blue-300 dark:placeholder:text-zinc-500`}
           />
           <button
             type="button"
             disabled={customAskBusy}
             onClick={() => void onCustomAsk()}
-            className="ml-2 shrink-0 text-sm font-medium text-blue-600 transition hover:text-blue-700 active:opacity-80 disabled:opacity-50 dark:text-blue-400 dark:hover:text-blue-300"
+            className={`ml-2 shrink-0 ${captureBodyCopySizeClass} font-medium text-blue-600 transition hover:text-blue-700 active:opacity-80 disabled:opacity-50 dark:text-blue-400 dark:hover:text-blue-300`}
           >
             {customAskBusy ? "Asking…" : "Ask"}
           </button>
@@ -342,7 +352,9 @@ export function CaptureFollowupsPanel({
                   onClick={() => handleQuestionRowClick(answerKey, text)}
                   className={followUpQuestionBtnClass}
                 >
-                  <span className="min-w-0 flex-1 text-left leading-snug">
+                  <span
+                    className={`min-w-0 flex-1 text-left ${captureBodyCopySizeClass}`}
+                  >
                     {text}
                   </span>
                   {isOpen ? (
