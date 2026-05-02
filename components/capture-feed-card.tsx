@@ -1,11 +1,11 @@
 "use client";
 
 import type { MouseEvent } from "react";
+import { FileText, Image as ImageIcon, Link } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import {
   captureRawTextForDisplay,
-  captureStatusDisplay,
   captureUrlForFeedDisplay,
   feedCaptureTypeDisplay,
   formatCaptureDateShort,
@@ -17,6 +17,7 @@ import {
   captureMetadataTextSizeClass,
 } from "@/lib/capture-ui";
 import { CaptureCardLead } from "@/components/capture-card-lead";
+import { useFeedClipStatusOptional } from "@/components/feed-clip-status-context";
 import { StickyClipTitle } from "@/components/capture-sticky-feed-title-dual";
 import { CaptureFollowupsPanel } from "@/components/capture-followups-panel";
 import { DeleteCaptureButton } from "@/components/delete-capture-button";
@@ -24,6 +25,32 @@ import { EnrichCaptureButton } from "@/components/enrich-capture-button";
 function stopOpenDetail(e: MouseEvent) {
   e.stopPropagation();
 }
+
+const feedMetaIconClass =
+  "h-3.5 w-3.5 shrink-0 text-zinc-400 dark:text-zinc-500";
+
+/** Small icon for clip kind (matches `feedCaptureTypeDisplay` semantics). */
+function FeedKindCaptureIcon({ c }: { c: CaptureRow }) {
+  const raw = feedCaptureTypeDisplay(c).trim().toLowerCase();
+  if (raw === "link" || raw === "url") {
+    return <Link className={feedMetaIconClass} strokeWidth={2} aria-hidden />;
+  }
+  if (raw === "screenshot") {
+    return (
+      <ImageIcon className={feedMetaIconClass} strokeWidth={2} aria-hidden />
+    );
+  }
+  return (
+    <FileText className={feedMetaIconClass} strokeWidth={2} aria-hidden />
+  );
+}
+
+const feedStatusBadgeBaseClass =
+  "shrink-0 text-[10px] font-semibold uppercase tracking-wide rounded-full px-2 py-0.5";
+
+const feedStatusNewBadgeClass = `${feedStatusBadgeBaseClass} bg-amber-100/95 text-amber-900 dark:bg-amber-950/55 dark:text-amber-200`;
+
+const feedStatusReviewedBadgeClass = `${feedStatusBadgeBaseClass} bg-zinc-100 text-zinc-500 dark:bg-zinc-800/90 dark:text-zinc-400`;
 
 function isEnrichmentError(status: string | null): boolean {
   return String(status ?? "").toLowerCase() === "error";
@@ -112,6 +139,9 @@ type Props = {
 };
 
 export function CaptureFeedCard({ c, onOpenDetail }: Props) {
+  const feedClipStatus = useFeedClipStatusOptional();
+  const statusBadge =
+    feedClipStatus?.clipBadge(String(c.id), c.created_at) ?? null;
   const hasAi = Boolean(c.ai_title?.trim());
   const analyzing = isAnalyzingStatus(c.status) && !hasAi;
   const presetFollowups = hasAi
@@ -125,16 +155,23 @@ export function CaptureFeedCard({ c, onOpenDetail }: Props) {
   const interactive = Boolean(onOpenDetail);
   const omitFeedTitle = hasAi && Boolean(c.ai_title?.trim());
 
+  const titleStatusBadge =
+    statusBadge === "new" ? (
+      <span className={feedStatusNewBadgeClass}>New</span>
+    ) : statusBadge === "reviewed" ? (
+      <span className={feedStatusReviewedBadgeClass}>Reviewed</span>
+    ) : null;
+
   return (
     <article
       id={`clip-${c.id}`}
       onClick={onOpenDetail ? () => onOpenDetail() : undefined}
       className={`relative mb-5 w-full min-w-0 overflow-visible rounded-2xl border border-zinc-200 bg-white px-0 pb-4 pt-0 shadow-md transition hover:shadow-md max-sm:touch-manipulation dark:border-zinc-700 dark:bg-zinc-800 sm:py-4 ${interactive ? "cursor-pointer" : ""}`}
     >
-      <StickyClipTitle clip={c} />
+      <StickyClipTitle clip={c} titleTrailing={titleStatusBadge} />
 
       {hasImage ? (
-        <div className="mb-0 w-full p-3 pt-2">
+        <div className="mb-0 w-full px-4 pt-2 pb-1">
           <div className="isolate w-full overflow-hidden rounded-xl border border-black/5 bg-black shadow-sm dark:border-white/10 sm:bg-zinc-100 dark:sm:bg-zinc-950">
             <img
               src={c.image_url!}
@@ -145,35 +182,15 @@ export function CaptureFeedCard({ c, onOpenDetail }: Props) {
         </div>
       ) : null}
 
-      <div className="px-3">
+      <div className="px-4">
         <div
-          className={`mt-2 mb-3 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 ${captureMetadataTextSizeClass} text-zinc-400`}
+          className={`mb-3 flex items-center gap-2 text-xs tabular-nums text-zinc-500 dark:text-zinc-400 ${hasImage ? "mt-1" : "mt-2"}`}
           onClick={interactive ? stopOpenDetail : undefined}
         >
-        <span className="max-w-[36%] truncate sm:max-w-none">
-          {feedCaptureTypeDisplay(c)}
-        </span>
-        <span className="text-zinc-300 dark:text-zinc-600" aria-hidden>
-          ·
-        </span>
-        <span className="max-w-[36%] truncate sm:max-w-none">
-          {c.source ?? "—"}
-        </span>
-        <span className="text-zinc-300 dark:text-zinc-600" aria-hidden>
-          ·
-        </span>
-        <time
-          className="tabular-nums text-zinc-400 dark:text-zinc-500"
-          dateTime={c.created_at}
-        >
-          {formatCaptureDateShort(c.created_at)}
-        </time>
-        <span className="text-zinc-300 dark:text-zinc-600" aria-hidden>
-          ·
-        </span>
-        <span className="shrink-0 text-zinc-500 dark:text-zinc-400">
-          {captureStatusDisplay(c.status)}
-        </span>
+          <FeedKindCaptureIcon c={c} />
+          <time className="min-w-0 shrink leading-snug" dateTime={c.created_at}>
+            {formatCaptureDateShort(c.created_at)}
+          </time>
         </div>
         <AnalyzingStatusBlock
           key={`${c.id}-${analyzing}`}

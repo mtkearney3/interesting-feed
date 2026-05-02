@@ -1,39 +1,44 @@
-import type { CSSProperties } from "react";
-
 /** Shared column width; horizontal padding lives on header/feed (`px-3`) so cards align edge-to-edge in the column. */
 export const rabbitHoleMainWidthClass = "mx-auto w-full max-w-[390px]";
 
-/** Outermost layout shell (pairs with {@link rabbitHolePageShellStyle}). */
-export const rabbitHolePageShellClass =
-  "min-h-screen w-full flex flex-1 flex-col";
+/** Full-viewport shell background (see `globals.css` `.rabbit-hole-page-bg`). */
+export const rabbitHolePageBgClass = "rabbit-hole-page-bg";
 
 /**
- * Same `background-image` as the header inner card (`var(--rabbit-hole-masthead-gradient)` in `globals.css`).
- * Prefer `style={{ backgroundImage: rabbitHoleMastheadBackgroundImage }}` when stacking with other backgrounds.
+ * Same background layer as `.rabbit-hole-page-bg` without min-height — for sticky strips
+ * so `background-*` matches the feed shell exactly (including `background-attachment: fixed`).
+ */
+export const rabbitHolePageBgPaintClass = "rabbit-hole-page-bg-paint";
+
+/** Same gradient paint as nav, for bars without `background-attachment: fixed`. */
+export const rabbitHoleMastheadFillClass = "rabbit-hole-masthead-fill";
+
+/** Outermost page shell: branded gradient + column flex. */
+export const rabbitHolePageShellClass = `${rabbitHolePageBgClass} w-full flex flex-1 flex-col`;
+
+/** Feed + post detail: transparent masthead blending into `.rabbit-hole-page-bg`. */
+export const rabbitHoleBlendedHeaderExpandedChrome =
+  "border-b border-transparent bg-transparent shadow-none ring-0";
+
+/** When scrolled: same CSS paint as `.rabbit-hole-page-bg` (via `.rabbit-hole-page-bg-paint`). */
+export const rabbitHoleBlendedHeaderCollapsedChrome = `border-b border-white/5 shadow-none ring-0 ${rabbitHolePageBgPaintClass}`;
+
+/** Break out of `max-w-[390px]` so a sticky bar can span the viewport (main feed header). */
+export const rabbitHoleFeedHeaderViewportBleedClass =
+  "w-screen ml-[calc(50%-50vw)] sm:ml-0 sm:w-full";
+
+/**
+ * Same `background-image` as the masthead (`var(--rabbit-hole-masthead-gradient)` in `globals.css`).
  */
 export const rabbitHoleMastheadBackgroundImage =
   "var(--rabbit-hole-masthead-gradient)" as const;
 
-/** Header inner: gradient only — border/shadow stay on the element in `rabbit-hole-sticky-header`. */
-export const rabbitHoleHeaderGradientBgClass =
-  "bg-[image:var(--rabbit-hole-masthead-gradient)]";
-
-/**
- * Page shell: identical `background-image` as the header, with geometry that matches the
- * header’s painted box (centered strip `min(100vw, 390px) − 24px` = column minus `px-3`).
- * Gutter fill uses the gradient’s start color so edges don’t flash a mismatched tone.
- */
-export const rabbitHolePageShellStyle = {
-  backgroundColor: "#1f2a20",
-  backgroundImage: rabbitHoleMastheadBackgroundImage,
-  backgroundSize: "calc(min(100vw, 390px) - 24px) 100%",
-  backgroundPosition: "center top",
-  backgroundRepeat: "no-repeat",
-} satisfies CSSProperties;
+/** Reuse masthead gradient on elements via the shared `.rabbit-hole-masthead-fill` utility. */
+export const rabbitHoleHeaderGradientBgClass = rabbitHoleMastheadFillClass;
 
 /** @deprecated Alias of {@link rabbitHoleHeaderGradientBgClass}. */
 export const rabbitHolePageBackdropGradientClass =
   rabbitHoleHeaderGradientBgClass;
 
-/** @deprecated Use {@link rabbitHolePageShellStyle} on the page shell. */
+/** @deprecated Use {@link rabbitHolePageBgClass} on the page shell. */
 export const rabbitHoleGradientBgClass = rabbitHolePageBackdropGradientClass;

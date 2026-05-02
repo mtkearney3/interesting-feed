@@ -1,23 +1,27 @@
 "use client";
 
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { useCallback, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+} from "react";
+import { FollowUpOwnQuestionInput } from "@/components/follow-up-own-question-input";
 import type { FollowupStructuredResponse } from "@/lib/openai-followup-answer";
 import {
   captureBodyCopySizeClass,
   captureSectionLabelSizeClass,
 } from "@/lib/capture-ui";
 
-const followUpQuestionBtnClass = `group flex w-full items-center justify-between gap-2 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-left ${captureBodyCopySizeClass} font-medium text-blue-700 transition hover:bg-blue-100 active:scale-[0.98] dark:border-blue-900/45 dark:bg-blue-950/40 dark:text-blue-200 dark:hover:bg-blue-950/60`;
+const followUpQuestionBtnClass = `group flex w-full min-w-0 items-center justify-between gap-2 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-left ${captureBodyCopySizeClass} font-medium text-blue-700 transition hover:bg-blue-100 active:scale-[0.98] dark:border-blue-900/45 dark:bg-blue-950/40 dark:text-blue-200 dark:hover:bg-blue-950/60`;
 
-/** Suggested follow-ups inside an answer card (not preset list). */
-const keepGoingQuestionBtnClass = `flex w-full items-center justify-between rounded-xl border border-blue-100 bg-white px-3 py-2 text-left ${captureBodyCopySizeClass} font-medium text-blue-600 transition active:scale-[0.98] dark:border-blue-900/40 dark:bg-zinc-950 dark:text-blue-300`;
+const keepGoingQuestionBtnClass = `flex w-full min-w-0 items-center justify-between rounded-xl border border-blue-100 bg-white px-3 py-2 text-left ${captureBodyCopySizeClass} font-medium text-blue-600 transition active:scale-[0.98] dark:border-blue-900/40 dark:bg-zinc-950 dark:text-blue-300`;
 
-type Props = {
-  captureId: string;
-  presetQuestions: string[];
-  enrichSlot?: ReactNode;
-};
+type CustomRow = { id: string; text: string; attachAfterKey?: string };
 
 type AnswerEntry = {
   loading: boolean;
@@ -25,138 +29,292 @@ type AnswerEntry = {
   data?: FollowupStructuredResponse;
 };
 
-function AnswerUnderQuestion({
-  answerKey,
-  expanded,
-  answersByKey,
-  expandedByKey,
-  onQuestionRowClick,
-  nested = false,
-}: {
-  answerKey: string;
-  expanded: boolean;
-  answersByKey: Record<string, AnswerEntry>;
-  expandedByKey: Record<string, boolean>;
-  onQuestionRowClick: (key: string, questionText: string) => void;
-  nested?: boolean;
-}) {
-  if (!expanded) return null;
+type TurnKind = "preset" | "suggested" | "custom_base" | "custom_inline";
 
-  const state = answersByKey[answerKey];
-  if (!state) return null;
+type ConversationTurn = {
+  id: string;
+  /** Same shape as legacy answer keys (preset/0, custom/uuid, …) for adjacency helper. */
+  pathKey: string;
+  depth: number;
+  questionText: string;
+  kind: TurnKind;
+  presetIndex?: number;
+  parentTurnId?: string | null;
+  /** Parent pathKey for custom_inline (attach target). */
+  parentPathKey?: string | null;
+  /** Index in parent’s `data.followUps` for suggested follow-ups. */
+  suggestionIndex?: number;
+  state: AnswerEntry;
+};
 
-  const loadingShell = `rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 ${captureBodyCopySizeClass} text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-200`;
-  const loadingShellNested = `mt-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2.5 ${captureBodyCopySizeClass} text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-200`;
+function turnsToSyntheticCustomRows(turns: ConversationTurn[]): CustomRow[] {
+  const rows: CustomRow[] = [];
+  for (const t of turns) {
+    if (t.kind !== "custom_inline" || !t.parentPathKey) continue;
+    const idPart = t.pathKey.startsWith("custom/")
+      ? t.pathKey.slice("custom/".length)
+      : t.id;
+    rows.push({
+      id: idPart,
+      text: t.questionText,
+      attachAfterKey: t.parentPathKey,
+    });
+  }
+  return rows;
+}
 
-  if (state.loading) {
-    return (
-      <div className={nested ? loadingShellNested : `ml-3 ${loadingShell}`}>
-        Thinking…
-      </div>
-    );
+function isConversationAskAdjacentToBaseSlot(
+  lastPathKey: string | null,
+  presetCount: number,
+  syntheticCustomRows: CustomRow[]
+): boolean {
+  if (lastPathKey == null || presetCount === 0) return false;
+
+  const lastPresetTopKey = `preset/${presetCount - 1}`;
+
+  if (lastPathKey === lastPresetTopKey) return true;
+  if (lastPathKey.startsWith(`${lastPresetTopKey}/`)) return true;
+
+  if (lastPathKey.startsWith("custom/")) {
+    const id = lastPathKey.slice("custom/".length);
+    const row = syntheticCustomRows.find((r) => r.id === id);
+    const p = row?.attachAfterKey;
+    if (p == null) return false;
+    if (p === lastPresetTopKey) return true;
+    if (p.startsWith(`${lastPresetTopKey}/`)) return true;
   }
 
-  const errorShell = `rounded-xl border border-red-200 bg-red-50 px-4 py-3 ${captureBodyCopySizeClass} text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-200`;
-  const errorShellNested = `mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 ${captureBodyCopySizeClass} text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-200`;
+  return false;
+}
 
-  if (state.error) {
-    return (
-      <div className={nested ? errorShellNested : `ml-3 ${errorShell}`}>
-        {state.error}
-      </div>
-    );
-  }
+const loadingShell = `w-full min-w-0 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 ${captureBodyCopySizeClass} text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-200`;
 
-  if (!state.data) return null;
+const errorShell = `w-full min-w-0 rounded-xl border border-red-200 bg-red-50 px-4 py-3 ${captureBodyCopySizeClass} text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-200`;
 
-  const { answer, followUps } = state.data;
+const answerCardClass = `w-full min-w-0 rounded-xl border border-zinc-200 bg-white px-4 py-3 ${captureBodyCopySizeClass} text-zinc-700 shadow-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300`;
 
-  const keepGoing =
-    followUps.length > 0 ? (
-      <div className="mt-4 border-t border-zinc-100 pt-3 dark:border-zinc-700/80">
-        <p
-          className={`mb-2 ${captureSectionLabelSizeClass} text-zinc-400 dark:text-zinc-500`}
-        >
-          Keep going
-        </p>
-        <div className="space-y-2">
-          {followUps.map((fu, i) => {
-            const childKey = `${answerKey}/fu/${i}`;
-            const childOpen = expandedByKey[childKey] === true;
-            return (
-              <div key={childKey} className="space-y-2">
-                <button
-                  type="button"
-                  className={keepGoingQuestionBtnClass}
-                  onClick={() => onQuestionRowClick(childKey, fu)}
-                >
-                  <span className={`min-w-0 flex-1 ${captureBodyCopySizeClass}`}>
-                    {fu}
-                  </span>
-                  {childOpen ? (
-                    <ChevronDown
-                      className="h-4 w-4 shrink-0 text-blue-400 dark:text-blue-400"
-                      aria-hidden
-                    />
-                  ) : (
-                    <ChevronRight
-                      className="h-4 w-4 shrink-0 text-blue-400 dark:text-blue-400"
-                      aria-hidden
-                    />
-                  )}
-                </button>
-                <AnswerUnderQuestion
-                  answerKey={childKey}
-                  expanded={childOpen}
-                  answersByKey={answersByKey}
-                  expandedByKey={expandedByKey}
-                  onQuestionRowClick={onQuestionRowClick}
-                  nested
-                />
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    ) : null;
+function findSuggestedChildTurn(
+  turns: ConversationTurn[],
+  parentId: string,
+  suggestionIndex: number
+): ConversationTurn | undefined {
+  return turns.find(
+    (t) =>
+      t.kind === "suggested" &&
+      t.parentTurnId === parentId &&
+      t.suggestionIndex === suggestionIndex
+  );
+}
 
-  if (nested) {
-    return (
-      <div
-        className={`mt-2 rounded-lg border border-zinc-100 bg-zinc-50/90 px-3 py-3 ${captureBodyCopySizeClass} text-zinc-700 shadow-inner dark:border-zinc-700 dark:bg-zinc-800/50 dark:text-zinc-300`}
-      >
-        <span className="whitespace-pre-wrap">{answer}</span>
-        {keepGoing}
-      </div>
-    );
-  }
+function customInlineChildrenFor(
+  turns: ConversationTurn[],
+  parentId: string
+): ConversationTurn[] {
+  return turns.filter(
+    (t) => t.kind === "custom_inline" && t.parentTurnId === parentId
+  );
+}
+
+type ResponseBlockProps = {
+  turn: ConversationTurn;
+  turns: ConversationTurn[];
+  openTurns: Record<string, boolean>;
+  setOpenTurns: Dispatch<SetStateAction<Record<string, boolean>>>;
+  lastCompletedTurnId: string | null;
+  showInlineOwnQuestion: boolean;
+  inlineAskText: string;
+  setInlineAskText: (v: string) => void;
+  inlineAskBusy: boolean;
+  onInlineCustomAsk: () => void | Promise<void>;
+  onSuggestedPick: (
+    parent: ConversationTurn,
+    text: string,
+    suggestionIndex: number
+  ) => void;
+};
+
+function ResponseBlock({
+  turn,
+  turns,
+  openTurns,
+  setOpenTurns,
+  lastCompletedTurnId,
+  showInlineOwnQuestion,
+  inlineAskText,
+  setInlineAskText,
+  inlineAskBusy,
+  onInlineCustomAsk,
+  onSuggestedPick,
+}: ResponseBlockProps) {
+  const { state } = turn;
+  const showInlineHere =
+    lastCompletedTurnId === turn.id && showInlineOwnQuestion;
+
+  const customInlines = customInlineChildrenFor(turns, turn.id);
 
   return (
-    <div
-      className={`ml-3 rounded-xl border border-zinc-200 bg-white px-4 py-3 ${captureBodyCopySizeClass} text-zinc-700 shadow-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300`}
-    >
-      <span className="whitespace-pre-wrap">{answer}</span>
-      {keepGoing}
+    <div className="w-full min-w-0 space-y-2">
+      {state.loading ? (
+        <div className={loadingShell}>Thinking…</div>
+      ) : null}
+      {state.error ? <div className={errorShell}>{state.error}</div> : null}
+      {state.data ? (
+        <>
+          <div className={answerCardClass}>
+            <span className="block min-w-0 whitespace-pre-wrap">
+              {state.data.answer}
+            </span>
+          </div>
+          {state.data.followUps.length > 0 ? (
+            <div className="w-full min-w-0 border-t border-zinc-100 pt-3 dark:border-zinc-700/80">
+              <p
+                className={`mb-2 ${captureSectionLabelSizeClass} text-zinc-400 dark:text-zinc-500`}
+              >
+                Keep going
+              </p>
+              <div className="w-full min-w-0 space-y-2">
+                {state.data.followUps.map((fu, idx) => {
+                  const child = findSuggestedChildTurn(turns, turn.id, idx);
+                  const childOpen = child ? openTurns[child.id] !== false : true;
+                  return (
+                    <div key={`${turn.id}-fu-${idx}`} className="w-full min-w-0 space-y-2">
+                      <button
+                        type="button"
+                        className={keepGoingQuestionBtnClass}
+                        onClick={() => {
+                          if (child) {
+                            setOpenTurns((prev) => {
+                              const cur = prev[child.id] !== false;
+                              return { ...prev, [child.id]: !cur };
+                            });
+                          } else {
+                            onSuggestedPick(turn, fu, idx);
+                          }
+                        }}
+                      >
+                        <span
+                          className={`min-w-0 flex-1 text-left ${captureBodyCopySizeClass}`}
+                        >
+                          {fu}
+                        </span>
+                        {child && childOpen ? (
+                          <ChevronDown
+                            className="h-4 w-4 shrink-0 text-blue-400 opacity-60 dark:text-blue-400"
+                            aria-hidden
+                          />
+                        ) : (
+                          <ChevronRight
+                            className="h-4 w-4 shrink-0 text-blue-400 opacity-60 dark:text-blue-400"
+                            aria-hidden
+                          />
+                        )}
+                      </button>
+                      {child != null && childOpen ? (
+                        <ResponseBlock
+                          turn={child}
+                          turns={turns}
+                          openTurns={openTurns}
+                          setOpenTurns={setOpenTurns}
+                          lastCompletedTurnId={lastCompletedTurnId}
+                          showInlineOwnQuestion={showInlineOwnQuestion}
+                          inlineAskText={inlineAskText}
+                          setInlineAskText={setInlineAskText}
+                          inlineAskBusy={inlineAskBusy}
+                          onInlineCustomAsk={onInlineCustomAsk}
+                          onSuggestedPick={onSuggestedPick}
+                        />
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+          {customInlines.map((ct) => (
+            <div key={ct.id} className="w-full min-w-0 space-y-2">
+              <button
+                type="button"
+                onClick={() =>
+                  setOpenTurns((prev) => {
+                    const cur = prev[ct.id] !== false;
+                    return { ...prev, [ct.id]: !cur };
+                  })
+                }
+                className={followUpQuestionBtnClass}
+              >
+                <span
+                  className={`min-w-0 flex-1 text-left ${captureBodyCopySizeClass}`}
+                >
+                  {ct.questionText}
+                </span>
+                {openTurns[ct.id] !== false ? (
+                  <ChevronDown
+                    className="h-4 w-4 shrink-0 text-blue-400 dark:text-blue-400"
+                    aria-hidden
+                  />
+                ) : (
+                  <ChevronRight
+                    className="h-4 w-4 shrink-0 text-blue-400 dark:text-blue-400"
+                    aria-hidden
+                  />
+                )}
+              </button>
+              {openTurns[ct.id] !== false ? (
+                <ResponseBlock
+                  turn={ct}
+                  turns={turns}
+                  openTurns={openTurns}
+                  setOpenTurns={setOpenTurns}
+                  lastCompletedTurnId={lastCompletedTurnId}
+                  showInlineOwnQuestion={showInlineOwnQuestion}
+                  inlineAskText={inlineAskText}
+                  setInlineAskText={setInlineAskText}
+                  inlineAskBusy={inlineAskBusy}
+                  onInlineCustomAsk={onInlineCustomAsk}
+                  onSuggestedPick={onSuggestedPick}
+                />
+              ) : null}
+            </div>
+          ))}
+          {showInlineHere ? (
+            <FollowUpOwnQuestionInput
+              className="w-full min-w-0 pt-1"
+              value={inlineAskText}
+              onChange={setInlineAskText}
+              onSubmit={() => void onInlineCustomAsk()}
+              busy={inlineAskBusy}
+            />
+          ) : null}
+        </>
+      ) : null}
     </div>
   );
 }
+
+type Props = {
+  captureId: string;
+  presetQuestions: string[];
+  enrichSlot?: ReactNode;
+};
 
 export function CaptureFollowupsPanel({
   captureId,
   presetQuestions,
   enrichSlot,
 }: Props) {
-  const [answersByKey, setAnswersByKey] = useState<
-    Record<string, AnswerEntry>
-  >({});
-  const [expandedByKey, setExpandedByKey] = useState<Record<string, boolean>>(
-    {}
-  );
-  const [customRows, setCustomRows] = useState<{ id: string; text: string }[]>(
-    []
-  );
+  const [turns, setTurns] = useState<ConversationTurn[]>([]);
+  const turnsRef = useRef(turns);
+  useEffect(() => {
+    turnsRef.current = turns;
+  }, [turns]);
+  const [openTurns, setOpenTurns] = useState<Record<string, boolean>>({});
   const [customText, setCustomText] = useState("");
   const [customAskBusy, setCustomAskBusy] = useState(false);
+  const [lastCompletedTurnId, setLastCompletedTurnId] = useState<string | null>(
+    null
+  );
+  const [inlineAskText, setInlineAskText] = useState("");
+  const [inlineAskBusy, setInlineAskBusy] = useState(false);
 
   const postQuestion = useCallback(
     async (question: string): Promise<FollowupStructuredResponse> => {
@@ -191,68 +349,181 @@ export function CaptureFollowupsPanel({
     [captureId]
   );
 
-  const askQuestion = useCallback(
-    (answerKey: string, questionText: string): Promise<void> => {
-      setAnswersByKey((prev) => ({
-        ...prev,
-        [answerKey]: { loading: true },
-      }));
-
-      return (async () => {
-        try {
-          const data = await postQuestion(questionText);
-          setAnswersByKey((prev) => ({
-            ...prev,
-            [answerKey]: { loading: false, data },
-          }));
-        } catch (e) {
-          const message =
-            e instanceof Error ? e.message : "Something went wrong";
-          setAnswersByKey((prev) => ({
-            ...prev,
-            [answerKey]: { loading: false, error: message },
-          }));
-        }
-      })();
+  const runFetchForTurn = useCallback(
+    async (turnId: string, question: string) => {
+      try {
+        const data = await postQuestion(question);
+        setTurns((prev) =>
+          prev.map((t) =>
+            t.id === turnId ? { ...t, state: { loading: false, data } } : t
+          )
+        );
+        setLastCompletedTurnId(turnId);
+        setInlineAskText("");
+      } catch (e) {
+        const message =
+          e instanceof Error ? e.message : "Something went wrong";
+        setTurns((prev) =>
+          prev.map((t) =>
+            t.id === turnId
+              ? { ...t, state: { loading: false, error: message } }
+              : t
+          )
+        );
+      }
     },
     [postQuestion]
   );
 
-  const handleQuestionRowClick = useCallback(
-    (answerKey: string, questionText: string) => {
-      const wasExpanded = expandedByKey[answerKey] === true;
-      const willOpen = !wasExpanded;
+  const presetTurnId = (index: number) => `preset-${index}`;
 
-      setExpandedByKey((prev) => ({
-        ...prev,
-        [answerKey]: willOpen,
-      }));
-
-      if (!willOpen) return;
-
-      const entry = answersByKey[answerKey];
-      if (!entry?.data && !entry?.loading) {
-        askQuestion(answerKey, questionText);
+  const handlePresetClick = useCallback(
+    (index: number, questionText: string) => {
+      const id = presetTurnId(index);
+      const existing = turnsRef.current.find((t) => t.id === id);
+      if (existing) {
+        setOpenTurns((prev) => {
+          const cur = prev[id] !== false;
+          return { ...prev, [id]: !cur };
+        });
+        return;
       }
+      const pathKey = `preset/${index}`;
+      setTurns((prev) => [
+        ...prev,
+        {
+          id,
+          pathKey,
+          depth: 0,
+          questionText,
+          kind: "preset",
+          presetIndex: index,
+          state: { loading: true },
+        },
+      ]);
+      setOpenTurns((prev) => ({ ...prev, [id]: true }));
+      void runFetchForTurn(id, questionText);
     },
-    [answersByKey, askQuestion, expandedByKey]
+    [runFetchForTurn]
   );
 
-  async function onCustomAsk() {
+  const handleSuggestedPick = useCallback(
+    (
+      parentTurn: ConversationTurn,
+      followUpText: string,
+      suggestionIndex: number
+    ) => {
+      if (
+        turnsRef.current.some(
+          (t) =>
+            t.kind === "suggested" &&
+            t.parentTurnId === parentTurn.id &&
+            t.suggestionIndex === suggestionIndex
+        )
+      ) {
+        return;
+      }
+      const newId = crypto.randomUUID();
+      const pathKey = `${parentTurn.pathKey}/fu/${newId}`;
+      setTurns((prev) => [
+        ...prev,
+        {
+          id: newId,
+          pathKey,
+          depth: parentTurn.depth + 1,
+          questionText: followUpText,
+          kind: "suggested",
+          parentTurnId: parentTurn.id,
+          suggestionIndex,
+          state: { loading: true },
+        },
+      ]);
+      setOpenTurns((prev) => ({ ...prev, [newId]: true }));
+      void runFetchForTurn(newId, followUpText);
+    },
+    [runFetchForTurn]
+  );
+
+  const onCustomAsk = useCallback(async () => {
     const q = customText.trim();
     if (!q || customAskBusy) return;
     setCustomAskBusy(true);
     try {
       const id = crypto.randomUUID();
-      const answerKey = `custom/${id}`;
-      setCustomRows((prev) => [...prev, { id, text: q }]);
-      setExpandedByKey((prev) => ({ ...prev, [answerKey]: true }));
+      const pathKey = `custom/${id}`;
+      setTurns((prev) => [
+        ...prev,
+        {
+          id,
+          pathKey,
+          depth: 0,
+          questionText: q,
+          kind: "custom_base",
+          state: { loading: true },
+        },
+      ]);
+      setOpenTurns((prev) => ({ ...prev, [id]: true }));
       setCustomText("");
-      await askQuestion(answerKey, q);
+      await runFetchForTurn(id, q);
     } finally {
       setCustomAskBusy(false);
     }
-  }
+  }, [customAskBusy, customText, runFetchForTurn]);
+
+  const onInlineCustomAsk = useCallback(async () => {
+    if (lastCompletedTurnId == null) return;
+    const parent = turnsRef.current.find((t) => t.id === lastCompletedTurnId);
+    if (!parent) return;
+    const q = inlineAskText.trim();
+    if (!q || inlineAskBusy) return;
+    setInlineAskBusy(true);
+    try {
+      const id = crypto.randomUUID();
+      const pathKey = `custom/${id}`;
+      setTurns((prev) => [
+        ...prev,
+        {
+          id,
+          pathKey,
+          depth: parent.depth + 1,
+          questionText: q,
+          kind: "custom_inline",
+          parentTurnId: parent.id,
+          parentPathKey: parent.pathKey,
+          state: { loading: true },
+        },
+      ]);
+      setOpenTurns((prev) => ({ ...prev, [id]: true }));
+      setInlineAskText("");
+      await runFetchForTurn(id, q);
+    } finally {
+      setInlineAskBusy(false);
+    }
+  }, [inlineAskBusy, inlineAskText, lastCompletedTurnId, runFetchForTurn]);
+
+  const lastPathKey =
+    lastCompletedTurnId == null
+      ? null
+      : (turns.find((t) => t.id === lastCompletedTurnId)?.pathKey ?? null);
+
+  const showBaseAskInput =
+    lastPathKey == null ||
+    !isConversationAskAdjacentToBaseSlot(
+      lastPathKey,
+      presetQuestions.length,
+      turnsToSyntheticCustomRows(turns)
+    );
+
+  const latestExpanded =
+    lastCompletedTurnId != null &&
+    openTurns[lastCompletedTurnId] !== false;
+
+  const showFloatingOwnQuestion =
+    lastCompletedTurnId != null && !latestExpanded;
+
+  const showInlineOwnQuestion = latestExpanded;
+
+  const customBaseTurns = turns.filter((t) => t.kind === "custom_base");
 
   return (
     <div className="mt-2 space-y-2.5 border-t border-zinc-200/80 pt-2.5 dark:border-zinc-800 sm:mt-4 sm:space-y-4 sm:pt-4">
@@ -265,19 +536,21 @@ export function CaptureFollowupsPanel({
           </p>
           <ul className="mt-2 space-y-2">
             {presetQuestions.map((question, index) => {
-              const answerKey = `preset/${index}`;
-              const isOpen = expandedByKey[answerKey] === true;
+              const tid = presetTurnId(index);
+              const presetTurn = turns.find((t) => t.id === tid);
+              const hasTurn = presetTurn != null;
+              const presetOpen = openTurns[tid] !== false;
               return (
-                <li key={answerKey} className="space-y-2">
+                <li key={tid} className="w-full min-w-0 space-y-2">
                   <button
                     type="button"
-                    onClick={() => handleQuestionRowClick(answerKey, question)}
+                    onClick={() => handlePresetClick(index, question)}
                     className={followUpQuestionBtnClass}
                   >
                     <span className={`min-w-0 flex-1 ${captureBodyCopySizeClass}`}>
                       {question}
                     </span>
-                    {isOpen ? (
+                    {hasTurn && presetOpen ? (
                       <ChevronDown
                         className="h-4 w-4 shrink-0 text-blue-400 dark:text-blue-400"
                         aria-hidden
@@ -289,13 +562,21 @@ export function CaptureFollowupsPanel({
                       />
                     )}
                   </button>
-                  <AnswerUnderQuestion
-                    answerKey={answerKey}
-                    expanded={isOpen}
-                    answersByKey={answersByKey}
-                    expandedByKey={expandedByKey}
-                    onQuestionRowClick={handleQuestionRowClick}
-                  />
+                  {presetTurn != null && presetOpen ? (
+                    <ResponseBlock
+                      turn={presetTurn}
+                      turns={turns}
+                      openTurns={openTurns}
+                      setOpenTurns={setOpenTurns}
+                      lastCompletedTurnId={lastCompletedTurnId}
+                      showInlineOwnQuestion={showInlineOwnQuestion}
+                      inlineAskText={inlineAskText}
+                      setInlineAskText={setInlineAskText}
+                      inlineAskBusy={inlineAskBusy}
+                      onInlineCustomAsk={onInlineCustomAsk}
+                      onSuggestedPick={handleSuggestedPick}
+                    />
+                  ) : null}
                 </li>
               );
             })}
@@ -303,83 +584,79 @@ export function CaptureFollowupsPanel({
         </div>
       ) : null}
 
-      <div className="space-y-1.5 sm:space-y-2">
-        <p
-          className={`${captureSectionLabelSizeClass} text-zinc-500 dark:text-zinc-500`}
-        >
-          Your question
-        </p>
-        <div className="flex w-full items-center rounded-xl border border-blue-200 bg-white px-3 py-2 shadow-sm transition focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 dark:border-blue-900/40 dark:bg-zinc-900 dark:focus-within:border-blue-500 dark:focus-within:ring-blue-950/40">
-          <input
-            type="text"
-            value={customText}
-            onChange={(e) => setCustomText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                if (customAskBusy || !customText.trim()) return;
-                void onCustomAsk();
-              }
-            }}
-            placeholder="Ask your own follow-up..."
-            className={`min-w-0 flex-1 border-0 bg-transparent py-1 ${captureBodyCopySizeClass} text-blue-700 outline-none placeholder:text-gray-400 dark:text-blue-300 dark:placeholder:text-zinc-500`}
-          />
-          <button
-            type="button"
-            disabled={customAskBusy}
-            onClick={() => void onCustomAsk()}
-            className={`ml-2 shrink-0 ${captureBodyCopySizeClass} font-medium text-blue-600 transition hover:text-blue-700 active:opacity-80 disabled:opacity-50 dark:text-blue-400 dark:hover:text-blue-300`}
-          >
-            {customAskBusy ? "Asking…" : "Ask"}
-          </button>
+      {showBaseAskInput ? (
+        <FollowUpOwnQuestionInput
+          value={customText}
+          onChange={setCustomText}
+          onSubmit={() => void onCustomAsk()}
+          busy={customAskBusy}
+        />
+      ) : null}
+      {enrichSlot ? (
+        <div className="mt-1.5 flex justify-center">
+          <div className="flex flex-col items-center gap-1">{enrichSlot}</div>
         </div>
-        {enrichSlot ? (
-          <div className="mt-1.5 flex justify-center">
-            <div className="flex flex-col items-center gap-1">{enrichSlot}</div>
-          </div>
-        ) : null}
-      </div>
+      ) : null}
 
-      {customRows.length > 0 ? (
-        <ul className="space-y-4">
-          {customRows.map(({ id, text }) => {
-            const answerKey = `custom/${id}`;
-            const isOpen = expandedByKey[answerKey] === true;
-            return (
-              <li key={id} className="space-y-2">
-                <button
-                  type="button"
-                  onClick={() => handleQuestionRowClick(answerKey, text)}
-                  className={followUpQuestionBtnClass}
+      {customBaseTurns.length > 0 ? (
+        <div className="w-full min-w-0 space-y-4">
+          {customBaseTurns.map((turn) => (
+            <div key={turn.id} className="w-full min-w-0 space-y-2">
+              <button
+                type="button"
+                onClick={() =>
+                  setOpenTurns((prev) => {
+                    const cur = prev[turn.id] !== false;
+                    return { ...prev, [turn.id]: !cur };
+                  })
+                }
+                className={followUpQuestionBtnClass}
+              >
+                <span
+                  className={`min-w-0 flex-1 text-left ${captureBodyCopySizeClass}`}
                 >
-                  <span
-                    className={`min-w-0 flex-1 text-left ${captureBodyCopySizeClass}`}
-                  >
-                    {text}
-                  </span>
-                  {isOpen ? (
-                    <ChevronDown
-                      className="h-4 w-4 shrink-0 text-blue-400 dark:text-blue-400"
-                      aria-hidden
-                    />
-                  ) : (
-                    <ChevronRight
-                      className="h-4 w-4 shrink-0 text-blue-400 dark:text-blue-400"
-                      aria-hidden
-                    />
-                  )}
-                </button>
-                <AnswerUnderQuestion
-                  answerKey={answerKey}
-                  expanded={isOpen}
-                  answersByKey={answersByKey}
-                  expandedByKey={expandedByKey}
-                  onQuestionRowClick={handleQuestionRowClick}
+                  {turn.questionText}
+                </span>
+                {openTurns[turn.id] !== false ? (
+                  <ChevronDown
+                    className="h-4 w-4 shrink-0 text-blue-400 dark:text-blue-400"
+                    aria-hidden
+                  />
+                ) : (
+                  <ChevronRight
+                    className="h-4 w-4 shrink-0 text-blue-400 dark:text-blue-400"
+                    aria-hidden
+                  />
+                )}
+              </button>
+              {openTurns[turn.id] !== false ? (
+                <ResponseBlock
+                  turn={turn}
+                  turns={turns}
+                  openTurns={openTurns}
+                  setOpenTurns={setOpenTurns}
+                  lastCompletedTurnId={lastCompletedTurnId}
+                  showInlineOwnQuestion={showInlineOwnQuestion}
+                  inlineAskText={inlineAskText}
+                  setInlineAskText={setInlineAskText}
+                  inlineAskBusy={inlineAskBusy}
+                  onInlineCustomAsk={onInlineCustomAsk}
+                  onSuggestedPick={handleSuggestedPick}
                 />
-              </li>
-            );
-          })}
-        </ul>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {showFloatingOwnQuestion ? (
+        <FollowUpOwnQuestionInput
+          className="mt-4 w-full min-w-0"
+          value={inlineAskText}
+          onChange={setInlineAskText}
+          onSubmit={() => void onInlineCustomAsk()}
+          busy={inlineAskBusy}
+        />
       ) : null}
     </div>
   );

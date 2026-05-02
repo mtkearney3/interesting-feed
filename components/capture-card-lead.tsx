@@ -81,7 +81,7 @@ export function CaptureCardLead(props: LeadFields) {
         ) : null}
         {scoreLabel(props.ai_insight_score) ? (
           <span className="rounded-full bg-amber-100 px-2.5 py-0.5 font-semibold text-amber-900 dark:bg-amber-950 dark:text-amber-200 sm:px-2.5">
-            Insight {scoreLabel(props.ai_insight_score)}
+            Interest {scoreLabel(props.ai_insight_score)}
           </span>
         ) : null}
       </div>

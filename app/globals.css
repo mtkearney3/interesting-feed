@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+html {
+  /* ~17px at common 16px UA default; all rem-based Tailwind type scales together */
+  font-size: 106.25%;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
@@ -13,6 +20,52 @@
     #334533 60%,
     #6b5a22 100%
   );
+  /* Same paint as masthead / sticky nav; use on full-page shell and fills */
+  --rabbit-hole-page-gradient: var(--rabbit-hole-masthead-gradient);
+  /**
+   * Masthead mustard (exact): Lucide rabbit + “new clips” line in `rabbit-hole-header.tsx`
+   * use `text-[#d4a017]` — this variable must stay in sync with that hex (not the green mid-stop `#334533`).
+   */
+  --rabbit-hole-accent: #d4a017;
+  /**
+   * Feed (mobile): sticky topic titles use `top` = this value so they sit under
+   * the reduced Rabbit Hole bar (`z-50`). Tune if compact masthead height changes.
+   */
+  --rabbit-hole-sticky-header-height: 48px;
+}
+
+/*
+ * Full app shell + sticky strips: one shared paint (feed + post detail must match).
+ * `.rabbit-hole-page-bg` adds min-height for the root shell only.
+ */
+:where(.rabbit-hole-page-bg, .rabbit-hole-page-bg-paint) {
+  background-color: #1f2a20;
+  background-image: var(--rabbit-hole-page-gradient);
+  background-size: cover;
+  background-position: center top;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+
+.rabbit-hole-page-bg {
+  min-height: 100dvh;
+}
+
+/** Feed filter bar: solid mustard active pill (avoids Tailwind arbitrary `bg-[var(...)]` quirks). */
+.rabbit-hole-feed-filter-pill--active {
+  background-color: var(--rabbit-hole-accent, #d4a017);
+  border-color: rgb(9 9 11 / 0.22);
+  color: #09090b;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.12);
+}
+
+/* Masthead bars (nav, modal title strip): same gradient, no fixed attachment */
+.rabbit-hole-masthead-fill {
+  background-color: #1f2a20;
+  background-image: var(--rabbit-hole-page-gradient);
+  background-size: cover;
+  background-position: center top;
+  background-repeat: no-repeat;
 }
 
 @theme inline {
@@ -30,9 +83,10 @@
 }
 
 body {
-  /* Background: Rabbit Hole gradient on `app/page.tsx` shell; body stays transparent. */
+  /* Rabbit Hole gradient lives on `.rabbit-hole-page-bg` (app/page shell); body stays transparent. */
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.55;
 }
 
 @keyframes capture-ai-enter {

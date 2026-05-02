@@ -1,13 +1,12 @@
 import { CaptureFeedWithDetail } from "@/components/capture-feed-with-detail";
+import { FeedClipStatusProvider } from "@/components/feed-clip-status-context";
+import { FeedFilterScrollProvider } from "@/components/feed-filter-scroll-context";
 import { MobilePullToRefresh } from "@/components/mobile-pull-to-refresh";
+import { RabbitHolePageShell } from "@/components/rabbit-hole-page-shell";
 import { RabbitHoleScrollProvider } from "@/components/rabbit-hole-scroll-context";
 import { RabbitHoleStickyHeader } from "@/components/rabbit-hole-sticky-header";
 import type { CaptureRow } from "@/lib/capture";
-import {
-  rabbitHoleMainWidthClass,
-  rabbitHolePageShellClass,
-  rabbitHolePageShellStyle,
-} from "@/lib/rabbit-hole-layout";
+import { rabbitHoleMainWidthClass } from "@/lib/rabbit-hole-layout";
 import { capturesListQueryWithColumnFallback } from "@/lib/captures-db-columns";
 import { supabase } from "@/lib/supabase";
 
@@ -19,7 +18,7 @@ export default async function Home() {
 
   if (error) {
     return (
-      <div className={rabbitHolePageShellClass} style={rabbitHolePageShellStyle}>
+      <RabbitHolePageShell>
         <div
           className={`${rabbitHoleMainWidthClass} bg-transparent px-3 py-8`}
         >
@@ -28,27 +27,31 @@ export default async function Home() {
             Could not load your clips: {error.message}
           </p>
         </div>
-      </div>
+      </RabbitHolePageShell>
     );
   }
 
   const rows = (captures ?? []) as CaptureRow[];
 
   return (
-    <div className={rabbitHolePageShellClass} style={rabbitHolePageShellStyle}>
+    <RabbitHolePageShell>
       <RabbitHoleScrollProvider>
-        <MobilePullToRefresh>
-          <div className={`${rabbitHoleMainWidthClass} bg-transparent`}>
-            <RabbitHoleStickyHeader
-              clips={rows.map((r) => ({ created_at: r.created_at }))}
-            />
+        <FeedClipStatusProvider>
+          <FeedFilterScrollProvider>
+            <MobilePullToRefresh>
+              <div className={`${rabbitHoleMainWidthClass} bg-transparent`}>
+                <RabbitHoleStickyHeader
+                  clips={rows.map((r) => ({ created_at: r.created_at }))}
+                />
 
-            <div className="w-full bg-transparent px-3 pb-28 pt-0 sm:pb-8 sm:pt-8">
-              <CaptureFeedWithDetail rows={rows} />
-            </div>
-          </div>
-        </MobilePullToRefresh>
+                <div className="w-full bg-transparent px-3 pb-28 pt-0 sm:pb-8 sm:pt-8">
+                  <CaptureFeedWithDetail rows={rows} />
+                </div>
+              </div>
+            </MobilePullToRefresh>
+          </FeedFilterScrollProvider>
+        </FeedClipStatusProvider>
       </RabbitHoleScrollProvider>
-    </div>
+    </RabbitHolePageShell>
   );
 }

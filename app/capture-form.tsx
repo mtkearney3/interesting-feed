@@ -354,13 +354,13 @@ export function CaptureForm() {
               }
               className={`${fieldClass} py-2.5 file:mr-3 file:rounded-md file:border-0 file:bg-zinc-200 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-zinc-800 dark:file:bg-zinc-700 dark:file:text-zinc-200`}
             />
-            <p className="mt-1 text-[11px] leading-snug text-zinc-500 dark:text-zinc-400">
+            <p className="mt-1 text-xs leading-normal text-zinc-500 dark:text-zinc-400">
               JPEG, PNG, WebP, or GIF (max 5MB). Optional unless you are not
               adding text or a URL.
             </p>
           </label>
 
-          <p className="text-[11px] leading-snug text-zinc-500 dark:text-zinc-400">
+          <p className="text-xs leading-normal text-zinc-500 dark:text-zinc-400">
             Clip type is set when you save: URL → url, else image →
             screenshot, else → text.
           </p>

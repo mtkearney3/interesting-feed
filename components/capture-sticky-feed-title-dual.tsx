@@ -7,8 +7,10 @@ type Props = {
   title: string;
 };
 
-const headingClass =
-  "min-w-0 flex-1 break-words text-lg font-semibold leading-tight tracking-tight text-[#1f2a20] max-md:text-xl dark:text-zinc-100 sm:text-xl md:text-base";
+const titleTypographyClass =
+  "text-lg font-semibold leading-tight tracking-tight text-[#1f2a20] max-md:text-xl dark:text-zinc-100 sm:text-xl md:text-base";
+
+const headingClass = `min-w-0 flex-1 break-words ${titleTypographyClass}`;
 
 /** Rounded title card only (no outer masking). */
 const titleBoxClass =
@@ -56,16 +58,37 @@ export function CaptureFeedTitleInBody({ title }: Props) {
  * Title above card body: horizontal inset comes from feed `px-3`; `top` tracks header height.
  * Same sticky behavior for screenshot, text-only, URL, and mixed clips.
  */
-function StickyFeedTitleChrome({ title }: { title: string }) {
+function StickyFeedTitleChrome({
+  title,
+  titleTrailing,
+}: {
+  title: string;
+  titleTrailing?: ReactNode;
+}) {
   return (
-    <div className="w-full max-sm:sticky max-sm:top-[48px] max-sm:z-[60] sm:static sm:top-auto sm:z-auto">
+    <div className="w-full max-sm:sticky max-sm:top-[var(--rabbit-hole-sticky-header-height)] max-sm:z-30 sm:static sm:top-auto sm:z-auto">
       <div
         className={`${titleBoxClass} sm:border-0 sm:bg-transparent sm:px-0 sm:py-0 sm:shadow-none`}
       >
-        <TitleRow>
+        <div
+          className={`${titleRowClass} ${title ? "items-start" : "items-center"}`}
+        >
           <CaptureFeedTitleBrandDot />
-          <h2 className={headingClass}>{title}</h2>
-        </TitleRow>
+          <div className="min-w-0 flex-1">
+            {title ? (
+              <h2
+                className={`inline min-w-0 max-w-full align-middle break-words ${titleTypographyClass}`}
+              >
+                {title}
+              </h2>
+            ) : null}
+            {titleTrailing ? (
+              <span className="ms-2 inline-flex shrink-0 align-middle">
+                {titleTrailing}
+              </span>
+            ) : null}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -74,12 +97,14 @@ function StickyFeedTitleChrome({ title }: { title: string }) {
 /** Feed: sticky AI title when present (all clip types). */
 export function StickyClipTitle({
   clip,
+  titleTrailing,
 }: {
   clip: Pick<CaptureRow, "ai_title">;
+  titleTrailing?: ReactNode;
 }) {
-  const title = clip.ai_title?.trim();
-  if (!title) return null;
-  return <StickyFeedTitleChrome title={title} />;
+  const title = clip.ai_title?.trim() ?? "";
+  if (!title && !titleTrailing) return null;
+  return <StickyFeedTitleChrome title={title} titleTrailing={titleTrailing} />;
 }
 
 export function CaptureStickyFeedTitleDual({ title }: Props) {
