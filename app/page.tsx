@@ -14,7 +14,7 @@ export default async function Home() {
 
   if (error) {
     return (
-      <div className="flex-1 bg-zinc-50 dark:bg-zinc-950">
+      <div className="flex-1 bg-zinc-200 dark:bg-zinc-900">
         <div className={`${rabbitHoleMainWidthClass} px-3 py-8`}>
           <h1 className="text-lg font-semibold text-foreground">Rabbit Hole</h1>
           <p className="mt-3 text-sm text-red-600 dark:text-red-400">
@@ -28,7 +28,7 @@ export default async function Home() {
   const rows = (captures ?? []) as CaptureRow[];
 
   return (
-    <div className="flex-1 bg-zinc-50 dark:bg-zinc-950">
+    <div className="flex-1 bg-zinc-200 dark:bg-zinc-900">
       <RabbitHoleScrollProvider>
         <div className={rabbitHoleMainWidthClass}>
           <RabbitHoleStickyHeader

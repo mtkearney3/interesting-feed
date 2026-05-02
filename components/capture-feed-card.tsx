@@ -119,12 +119,12 @@ export function CaptureFeedCard({ c, onOpenDetail }: Props) {
     <article
       id={`clip-${c.id}`}
       onClick={onOpenDetail ? () => onOpenDetail() : undefined}
-      className={`relative mb-5 w-full min-w-0 overflow-visible rounded-2xl border border-zinc-200/80 bg-white px-0 pb-4 pt-0 shadow-[0_4px_18px_rgba(15,23,42,0.04)] max-sm:touch-manipulation dark:border-zinc-800 dark:bg-zinc-950 sm:py-4 ${interactive ? "cursor-pointer" : ""}`}
+      className={`relative mb-5 w-full min-w-0 overflow-visible rounded-2xl border border-zinc-200 bg-white px-0 pb-4 pt-0 shadow-sm transition hover:shadow-md max-sm:touch-manipulation dark:border-zinc-700 dark:bg-zinc-800 sm:py-4 ${interactive ? "cursor-pointer" : ""}`}
     >
       <StickyClipTitle clip={c} />
 
       {hasImage ? (
-        <div className="mb-0 w-full">
+        <div className="mb-0 w-full p-3 pt-2">
           <div className="isolate w-full overflow-hidden rounded-xl border border-black/5 bg-black shadow-sm dark:border-white/10 sm:bg-zinc-100 dark:sm:bg-zinc-950">
             <img
               src={c.image_url!}

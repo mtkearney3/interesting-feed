@@ -71,7 +71,7 @@ export function CaptureDetailModal({ capture, onClose }: Props) {
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="relative z-10 flex h-full max-h-full min-h-0 w-full flex-1 flex-col overflow-hidden bg-zinc-50 shadow-2xl dark:bg-zinc-950 sm:h-auto sm:max-h-[min(90vh,880px)] sm:max-w-2xl sm:flex-none sm:rounded-2xl sm:ring-1 sm:ring-zinc-200/80 dark:sm:ring-zinc-800"
+        className="relative z-10 flex h-full max-h-full min-h-0 w-full flex-1 flex-col overflow-hidden bg-zinc-200 shadow-2xl dark:bg-zinc-900 sm:h-auto sm:max-h-[min(90vh,880px)] sm:max-w-2xl sm:flex-none sm:rounded-2xl sm:ring-1 sm:ring-zinc-200/80 dark:sm:ring-zinc-800"
       >
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           <header className="sticky top-0 z-50 bg-transparent px-3 pt-0 pb-0 sm:px-5">
