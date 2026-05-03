@@ -1,6 +1,6 @@
 import { describeCaptureEnrichBranch } from "@/lib/captures-enrich-pipeline";
 import { runCaptureEnrichment } from "@/lib/run-capture-enrichment";
-import { supabase } from "@/lib/supabase";
+import { createRouteHandlerSupabaseClient } from "@/lib/supabase/route-handler";
 import { NextResponse } from "next/server";
 
 export const maxDuration = 60;
@@ -15,6 +15,14 @@ export async function POST(
   }
 
   try {
+    const supabase = await createRouteHandlerSupabaseClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { data: preRow } = await supabase
       .from("captures")
       .select("id, raw_text, url, image_url, capture_type, status")

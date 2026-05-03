@@ -1,10 +1,7 @@
-import { resolveCaptureInsertFromBody } from "@/lib/capture-insert-resolve";
-import {
-  markCaptureEnrichmentFailure,
-  runCaptureEnrichment,
-} from "@/lib/run-capture-enrichment";
-import { supabase } from "@/lib/supabase";
-import { after } from "next/server";
+import { computeCaptureInsertFromParsed } from "@/lib/capture-insert-compute";
+import { scheduleCaptureEnrichmentAfterResponse } from "@/lib/capture-enrich-after";
+import { parseCapturePostRequest } from "@/lib/capture-request-parse";
+import { createRouteHandlerSupabaseClient } from "@/lib/supabase/route-handler";
 
 /** Lets a bookmarklet POST from arbitrary pages (dev: localhost only). */
 const BOOKMARKLET_CORS_HEADERS = {
@@ -27,136 +24,36 @@ export async function OPTIONS() {
   return new Response(null, { status: 204, headers: BOOKMARKLET_CORS_HEADERS });
 }
 
-function stripUrlTail(u: string): string {
-  return u.replace(/[)\].,;:]+$/g, "").trim();
-}
-
-/** First http(s) URL in a string (JSON or plain). */
-function firstHttpUrlInString(s: string): string {
-  if (!s) return "";
-  const strict = s.match(/https?:\/\/[^\s"]+/i);
-  if (strict?.[0]) return stripUrlTail(strict[0]);
-  const loose = s.match(/https?:\/\/[^"'\s\\]+/i);
-  if (loose?.[0]) return stripUrlTail(loose[0]);
-  const idx = s.search(/https?:\/\//i);
-  if (idx < 0) return "";
-  const tail = s.slice(idx);
-  const end = tail.search(/[\s"'<>\])},;]/);
-  const chunk =
-    end > 0 ? tail.slice(0, end) : stripUrlTail(tail.slice(0, 4000));
-  return stripUrlTail(chunk);
-}
-
-function pickExistingText(body: Record<string, unknown>): string {
-  for (const k of [
-    "raw_text",
-    "text",
-    "title",
-    "content",
-    "name",
-    "shortcutInput",
-    "plainText",
-  ] as const) {
-    const v = body[k];
-    if (typeof v === "string" && v.trim()) return v.trim();
-  }
-  return "";
-}
-
 export async function POST(request: Request) {
-  const rawText = await request.text();
-  let rawBody: Record<string, unknown> = {};
-  let parseOk = false;
-  try {
-    rawBody = JSON.parse(rawText) as Record<string, unknown>;
-    parseOk = true;
-  } catch {
-    rawBody = {};
+  const supabase = await createRouteHandlerSupabaseClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return jsonWithCors(
+      { error: "Unauthorized", code: "unauthorized" },
+      { status: 401 }
+    );
   }
 
-  const detectedUrlFromRawBody = firstHttpUrlInString(rawText);
-  const detectedUrlFromParsedString = parseOk
-    ? firstHttpUrlInString(JSON.stringify(rawBody))
-    : "";
-
-  if (!parseOk && detectedUrlFromRawBody) {
-    rawBody = {
-      raw_text: rawText.trim().slice(0, 80_000),
-      url: detectedUrlFromRawBody,
-      source: "ios_share",
-    };
-    parseOk = true;
-  }
+  const parsed = await parseCapturePostRequest(request);
 
   try {
-    const R = resolveCaptureInsertFromBody(rawBody);
-    const { rawJson, norm, trimmedImage } = R;
-    const user_note = norm.user_note;
-
-    let normalizedUrl =
-      R.trimmedUrl ||
-      detectedUrlFromRawBody ||
-      detectedUrlFromParsedString ||
-      "";
-    normalizedUrl = normalizedUrl.trim();
-
-    if (!normalizedUrl && /https?:\/\//i.test(rawText)) {
-      normalizedUrl = firstHttpUrlInString(rawText).trim();
-    }
-    if (!normalizedUrl && parseOk && /https?:\/\//i.test(rawJson)) {
-      normalizedUrl = firstHttpUrlInString(rawJson).trim();
+    const computed = computeCaptureInsertFromParsed(parsed);
+    if (!computed.ok) {
+      return jsonWithCors(
+        {
+          error: computed.error,
+          code: computed.code,
+          ...(computed.debugRequested && computed.debug
+            ? { _shortcut_debug: computed.debug }
+            : {}),
+        },
+        { status: 400 }
+      );
     }
 
-    let normalizedRawText = R.trimmedRaw.trim();
-    if (!normalizedRawText) {
-      normalizedRawText =
-        pickExistingText(rawBody) || normalizedUrl || "";
-    }
-
-    const isManual =
-      String(rawBody.source ?? "")
-        .trim()
-        .toLowerCase() === "manual";
-
-    let finalSource = R.finalSource.trim();
-    let finalCaptureType = R.resolvedType;
-    if (normalizedUrl) {
-      finalCaptureType = "url";
-      if (isManual) {
-        finalSource = "manual";
-      } else {
-        finalSource = "ios_url_share";
-      }
-    }
-
-    let hasUrl = normalizedUrl.length > 0;
-    let hasRawForInsert = normalizedRawText.length > 0;
-    const hasImage = Boolean(trimmedImage);
-
-    if (
-      /https?:\/\//i.test(rawText) ||
-      (parseOk && /https?:\/\//i.test(rawJson))
-    ) {
-      if (!normalizedUrl.trim()) {
-        normalizedUrl =
-          firstHttpUrlInString(rawText) || firstHttpUrlInString(rawJson);
-      }
-      if (normalizedUrl && !normalizedRawText.trim()) {
-        normalizedRawText = normalizedUrl;
-      }
-      if (normalizedUrl) {
-        finalCaptureType = "url";
-        if (isManual) finalSource = "manual";
-        else finalSource = "ios_url_share";
-      }
-      normalizedUrl = normalizedUrl.trim();
-      normalizedRawText = normalizedRawText.trim();
-      hasUrl = normalizedUrl.length > 0;
-      hasRawForInsert = normalizedRawText.length > 0;
-    }
-
-    normalizedUrl = normalizedUrl.trim();
-    normalizedRawText = normalizedRawText.trim();
+    const { insert, norm, rawJson, normalizedBody, debugRequested } = computed;
 
     const maxRawLog = 65536;
     console.log(
@@ -168,15 +65,8 @@ export async function POST(request: Request) {
 
     console.log("API_CAPTURE_INCOMING", {
       rawBodyFirst1000: rawJson.slice(0, 1000),
-      parsedKeys: Object.keys(rawBody),
-      detectedUrl: normalizedUrl || R.detectedUrl,
-      normalizedUrl,
-      finalSourceType: finalSource,
-      finalCaptureType,
-      hasImageUrl: hasImage,
+      parsedKeys: Object.keys(parsed.rawBody),
     });
-
-    const debugRequested = rawBody.debug === true;
 
     const rawTextPreview =
       norm.raw_text.length > 2000
@@ -185,67 +75,29 @@ export async function POST(request: Request) {
     console.log("API_CAPTURE_CREATE_NORMALIZED", {
       raw_text: rawTextPreview,
       url: norm.url,
-      urlEffective: normalizedUrl,
-      source: finalSource,
-      source_type: finalSource,
+      source: insert.source,
       title: norm.title,
-      hasImageUrl: norm.hasImageUrl,
+      hasImageUrl: Boolean(insert.image_url),
     });
 
     console.log("API_CAPTURE_CREATE_INPUT", {
-      trimmedUrlLen: normalizedUrl.length,
-      trimmedUrlPrefix: normalizedUrl.slice(0, 120),
-      trimmedRawLen: normalizedRawText.length,
-      hasImageUrl: hasImage,
-      source: finalSource,
-      capture_type_body: rawBody.capture_type,
+      trimmedUrlLen: (insert.url ?? "").length,
+      trimmedRawLen: (insert.raw_text ?? "").length,
+      hasImageUrl: Boolean(insert.image_url),
+      source: insert.source,
+      capture_type_body: parsed.rawBody.capture_type,
     });
-
-    const normalizedBody = {
-      ...norm,
-      url: normalizedUrl,
-      source: finalSource,
-      source_type: finalSource,
-      capture_type: finalCaptureType,
-    };
-
-    if (!hasUrl && !hasRawForInsert && !hasImage) {
-      console.error("API_CAPTURE_400_REJECTED", {
-        rawBodyFirst1000: rawText.slice(0, 1000),
-        parsedKeys: Object.keys(rawBody),
-        detectedUrlFromRawBody,
-        detectedUrlFromParsedString,
-        normalizedUrl,
-        normalizedRawText: normalizedRawText.slice(0, 500),
-        hasImageUrl: hasImage,
-      });
-      return jsonWithCors(
-        {
-          error:
-            "No usable content: need an http(s) URL, non-empty text, or an image.",
-          code: "no_content",
-          ...(debugRequested
-            ? {
-                _shortcut_debug: {
-                  normalized: norm,
-                  normalizedBody,
-                },
-              }
-            : {}),
-        },
-        { status: 400 }
-      );
-    }
 
     const { data, error } = await supabase
       .from("captures")
       .insert({
-        raw_text: hasRawForInsert ? normalizedRawText : null,
-        url: hasUrl ? normalizedUrl.trim() : null,
-        source: finalSource,
-        user_note,
-        capture_type: finalCaptureType,
-        image_url: trimmedImage,
+        user_id: user.id,
+        raw_text: insert.raw_text,
+        url: insert.url,
+        source: insert.source,
+        user_note: insert.user_note,
+        capture_type: insert.capture_type,
+        image_url: insert.image_url,
         status: "analyzing",
       })
       .select(
@@ -277,6 +129,8 @@ export async function POST(request: Request) {
       );
     }
 
+    const hasUrl = Boolean(insert.url?.trim());
+    const hasImage = Boolean(insert.image_url);
     const finalKind = hasUrl ? "url_article" : hasImage ? "screenshot" : "text";
 
     console.log("API_CAPTURE_INSERT_RESULT", {
@@ -288,58 +142,11 @@ export async function POST(request: Request) {
       finalKind,
     });
 
-    try {
-      after(() => {
-        console.log("ENRICH_AFTER_STARTED", {
-          captureId: data.id,
-          note: "background_only_does_not_block_201",
-        });
-        void (async () => {
-          const captureId = data.id;
-          try {
-            console.info("[auto-enrich] start", { captureId });
-            const result = await runCaptureEnrichment(captureId, {
-              skipMarkProcessing: true,
-            });
-            if (!result.ok) {
-              console.error("[auto-enrich] finished with failure", {
-                captureId,
-                error: result.error,
-                httpStatus: result.httpStatus,
-              });
-            } else {
-              console.info("[auto-enrich] success", { captureId });
-            }
-          } catch (err) {
-            const message = err instanceof Error ? err.message : String(err);
-            console.error("ENRICH_AFTER_ERROR_NON_BLOCKING", {
-              captureId,
-              stage: "auto_enrich_inner",
-              message,
-            });
-            try {
-              await markCaptureEnrichmentFailure(captureId, message);
-            } catch (markErr) {
-              console.error("ENRICH_AFTER_ERROR_NON_BLOCKING", {
-                captureId,
-                stage: "mark_failure_after_enrich_throw",
-                message:
-                  markErr instanceof Error ? markErr.message : String(markErr),
-              });
-            }
-          }
-        })();
-      });
-    } catch (scheduleErr) {
-      console.error("ENRICH_AFTER_ERROR_NON_BLOCKING", {
-        stage: "after_schedule",
-        message:
-          scheduleErr instanceof Error
-            ? scheduleErr.message
-            : String(scheduleErr),
-        note: "201_response_still_sent_enrichment_may_run_via_client_POST_enrich",
-      });
-    }
+    console.log("ENRICH_AFTER_STARTED", {
+      captureId: data.id,
+      note: "background_only_does_not_block_201",
+    });
+    scheduleCaptureEnrichmentAfterResponse(data.id);
 
     const responseBody: Record<string, unknown> = {
       ...(data as Record<string, unknown>),

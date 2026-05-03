@@ -5,7 +5,7 @@ import {
   isMissingOptionalCaptureColumnError,
 } from "@/lib/captures-db-columns";
 import { enrichCaptureWithOpenAI } from "@/lib/openai-enrich";
-import { supabase } from "@/lib/supabase";
+import { getServiceSupabase } from "@/lib/supabase-service";
 
 const ENRICH_NOTE_PREFIX = "[enrichment] ";
 const ENRICH_NOTE_MAX = 4000;
@@ -36,7 +36,14 @@ export async function markCaptureEnrichmentFailure(
   captureId: string,
   reason: string
 ): Promise<void> {
-  const { error } = await supabase
+  const db = getServiceSupabase();
+  if (!db) {
+    console.error("[enrich] markCaptureEnrichmentFailure skipped (no service key)", {
+      captureId,
+    });
+    return;
+  }
+  const { error } = await db
     .from("captures")
     .update({
       status: "error",
@@ -56,7 +63,15 @@ async function updateCaptureAfterEnrichment(
   captureId: string,
   updatePayload: Record<string, unknown>
 ): Promise<{ data: Record<string, unknown> | null; error: { message: string } | null }> {
-  let result = await supabase
+  const db = getServiceSupabase();
+  if (!db) {
+    return {
+      data: null,
+      error: { message: "Missing SUPABASE_SERVICE_ROLE_KEY for enrichment DB" },
+    };
+  }
+
+  let result = await db
     .from("captures")
     .update(updatePayload)
     .eq("id", captureId)
@@ -78,7 +93,7 @@ async function updateCaptureAfterEnrichment(
       captureId,
       message: result.error.message,
     });
-    result = await supabase
+    result = await db
       .from("captures")
       .update(rest)
       .eq("id", captureId)
@@ -106,7 +121,17 @@ export async function runCaptureEnrichment(
   options?: RunOptions
 ): Promise<RunEnrichmentResult> {
   try {
-    const { data: row, error: fetchError } = await supabase
+    const db = getServiceSupabase();
+    if (!db) {
+      return {
+        ok: false,
+        error:
+          "Server misconfiguration: set SUPABASE_SERVICE_ROLE_KEY so enrichment can update captures under RLS.",
+        httpStatus: 503,
+      };
+    }
+
+    const { data: row, error: fetchError } = await db
       .from("captures")
       .select(CAPTURES_ENRICH_FETCH_SELECT)
       .eq("id", captureId)
@@ -168,7 +193,7 @@ export async function runCaptureEnrichment(
     });
 
     if (!options?.skipMarkProcessing) {
-      const { error: processingError } = await supabase
+      const { error: processingError } = await db
         .from("captures")
         .update({ status: "analyzing" })
         .eq("id", captureId);
@@ -254,7 +279,7 @@ export async function runCaptureEnrichment(
           pipeline: enriched.last_enrichment_pipeline,
         });
 
-        let verify = await supabase
+        let verify = await db
           .from("captures")
           .select("id, url_article_text, ai_summary, ai_related_notes")
           .eq("id", captureId)
@@ -264,7 +289,7 @@ export async function runCaptureEnrichment(
           verify.error &&
           isMissingOptionalCaptureColumnError(verify.error)
         ) {
-          verify = await supabase
+          verify = await db
             .from("captures")
             .select("id, ai_summary, ai_related_notes")
             .eq("id", captureId)

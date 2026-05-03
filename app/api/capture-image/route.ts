@@ -25,6 +25,25 @@ export async function POST(request: Request) {
     );
   }
 
+  const reqUrl = new URL(request.url);
+  const shortcutToken = reqUrl.searchParams.get("token")?.trim() ?? "";
+  let storageUserPrefix: string | null = null;
+  if (shortcutToken) {
+    const { data: tok, error: tokErr } = await supabase
+      .from("user_shortcut_tokens")
+      .select("user_id")
+      .eq("token", shortcutToken)
+      .is("revoked_at", null)
+      .maybeSingle();
+    if (tokErr || !tok?.user_id) {
+      return Response.json(
+        { error: "Invalid or revoked shortcut token." },
+        { status: 401 }
+      );
+    }
+    storageUserPrefix = String(tok.user_id);
+  }
+
   let form: FormData;
   try {
     form = await request.formData();
@@ -57,7 +76,9 @@ export async function POST(request: Request) {
     );
   }
 
-  const path = `${randomUUID()}.${ext}`;
+  const path = storageUserPrefix
+    ? `shortcut/${storageUserPrefix}/${randomUUID()}.${ext}`
+    : `${randomUUID()}.${ext}`;
   const { error: uploadError } = await supabase.storage
     .from(BUCKET)
     .upload(path, buf, {

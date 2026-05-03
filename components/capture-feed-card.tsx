@@ -184,7 +184,7 @@ export function CaptureFeedCard({ c, onOpenDetail }: Props) {
 
       <div className="px-4">
         <div
-          className={`mb-3 flex items-center gap-2 text-xs tabular-nums text-zinc-500 dark:text-zinc-400 ${hasImage ? "mt-1" : "mt-2"}`}
+          className={`mb-3 flex items-center gap-2 text-sm tabular-nums text-zinc-500 dark:text-zinc-400 ${hasImage ? "mt-1" : "mt-2"}`}
           onClick={interactive ? stopOpenDetail : undefined}
         >
           <FeedKindCaptureIcon c={c} />

@@ -38,11 +38,13 @@ export function isMissingOptionalCaptureColumnError(
 }
 
 export async function capturesListQueryWithColumnFallback(
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
+  userId: string
 ) {
   const extended = await supabase
     .from("captures")
     .select(CAPTURES_LIST_SELECT_EXTENDED)
+    .eq("user_id", userId)
     .order("created_at", { ascending: false });
 
   if (!extended.error) {
@@ -64,6 +66,7 @@ export async function capturesListQueryWithColumnFallback(
     const core = await supabase
       .from("captures")
       .select(CAPTURES_LIST_SELECT_CORE)
+      .eq("user_id", userId)
       .order("created_at", { ascending: false });
     console.log("CAPTURE_FEED_QUERY", {
       select: "core_fallback",

@@ -13,6 +13,7 @@ import {
 
 type Props = {
   clips: { created_at: string }[];
+  userId: string;
 };
 
 const outerStickyBase = `sticky top-0 z-50 mb-7 ${rabbitHoleFeedHeaderViewportBleedClass} sm:static sm:top-auto sm:z-auto sm:mb-5`;
@@ -29,9 +30,9 @@ function mastheadClickShouldScroll(e: MouseEvent<HTMLDivElement>): boolean {
 }
 
 const headerFilterPillClass =
-  "rabbit-hole-feed-filter-pill--active max-w-[42%] truncate rounded-full border px-2.5 py-1 text-center text-xs font-semibold sm:max-w-[11rem]";
+  "rabbit-hole-feed-filter-pill--active max-w-[42%] truncate rounded-full border px-2.5 py-1 text-center text-sm font-semibold sm:max-w-[11rem]";
 
-export function RabbitHoleStickyHeader({ clips }: Props) {
+export function RabbitHoleStickyHeader({ clips, userId }: Props) {
   const isScrolled = useRabbitHoleScrolled();
   const filterScroll = useFeedFilterScrollOptional();
   const showFilterPill = Boolean(filterScroll?.filterBarScrolledPast);
@@ -51,7 +52,7 @@ export function RabbitHoleStickyHeader({ clips }: Props) {
               window.scrollTo({ top: 0, behavior: "smooth" });
             }}
           >
-            <RabbitHoleHeader clips={clips} compact={isScrolled} />
+            <RabbitHoleHeader clips={clips} compact={isScrolled} userId={userId} />
           </div>
           {showFilterPill && filterScroll ? (
             <span

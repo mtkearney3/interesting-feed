@@ -10,11 +10,12 @@ import {
   type ReactNode,
 } from "react";
 import {
-  RABBIT_HOLE_LAST_SEEN_KEY,
   isClipNewSince,
   loadReviewedClipIds,
   normalizeFeedClipId,
   persistReviewedClipIds,
+  rabbitHoleLastSeenKeyForUser,
+  rabbitHoleReviewedClipIdsKeyForUser,
 } from "@/lib/rabbit-hole-feed-session";
 
 export type FeedClipBadge = "new" | "reviewed" | null;
@@ -26,16 +27,25 @@ type Ctx = {
 
 const FeedClipStatusContext = createContext<Ctx | null>(null);
 
-export function FeedClipStatusProvider({ children }: { children: ReactNode }) {
+export function FeedClipStatusProvider({
+  userId,
+  children,
+}: {
+  userId: string;
+  children: ReactNode;
+}) {
+  const lastSeenKey = rabbitHoleLastSeenKeyForUser(userId);
+  const reviewedKey = rabbitHoleReviewedClipIdsKeyForUser(userId);
+
   const [hydrated, setHydrated] = useState(false);
   const [newSinceCutoff, setNewSinceCutoff] = useState<string | null>(null);
   const [reviewedIds, setReviewedIds] = useState<Set<string>>(() => new Set());
 
   useLayoutEffect(() => {
-    setNewSinceCutoff(localStorage.getItem(RABBIT_HOLE_LAST_SEEN_KEY));
-    setReviewedIds(loadReviewedClipIds());
+    setNewSinceCutoff(localStorage.getItem(lastSeenKey));
+    setReviewedIds(loadReviewedClipIds(reviewedKey));
     setHydrated(true);
-  }, []);
+  }, [userId, lastSeenKey, reviewedKey]);
 
   const markClipReviewed = useCallback((id: string) => {
     const key = normalizeFeedClipId(id);
@@ -44,10 +54,10 @@ export function FeedClipStatusProvider({ children }: { children: ReactNode }) {
       if (prev.has(key)) return prev;
       const next = new Set(prev);
       next.add(key);
-      persistReviewedClipIds(next);
+      persistReviewedClipIds(next, reviewedKey);
       return next;
     });
-  }, []);
+  }, [reviewedKey]);
 
   const clipBadge = useCallback(
     (clipId: string, createdAt: string): FeedClipBadge => {

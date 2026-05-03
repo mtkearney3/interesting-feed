@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 html {
-  /* ~17px at common 16px UA default; all rem-based Tailwind type scales together */
-  font-size: 106.25%;
+  /* Root rem scale for Tailwind (was 106.25% ≈17px at 16px UA; explicit 17px matches). */
+  font-size: 17px;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
 }
@@ -86,6 +86,7 @@ body {
   /* Rabbit Hole gradient lives on `.rabbit-hole-page-bg` (app/page shell); body stays transparent. */
   color: var(--foreground);
   font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  font-size: 1.05rem;
   line-height: 1.55;
 }
 

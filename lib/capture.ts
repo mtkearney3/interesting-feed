@@ -19,6 +19,7 @@ export type CaptureStatus = (typeof CAPTURE_STATUSES)[number];
 
 export type CaptureRow = {
   id: string;
+  user_id?: string | null;
   raw_text: string | null;
   url: string | null;
   source: string | null;

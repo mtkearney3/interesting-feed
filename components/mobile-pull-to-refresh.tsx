@@ -140,7 +140,7 @@ export function MobilePullToRefresh({ children }: { children: ReactNode }) {
           }}
           aria-live="polite"
         >
-          <div className="rounded-full border border-zinc-200/80 bg-white/80 px-3 py-1.5 text-center text-xs font-medium leading-normal text-zinc-600 shadow-sm backdrop-blur-sm dark:border-zinc-600/80 dark:bg-zinc-800/80 dark:text-zinc-300">
+          <div className="rounded-full border border-zinc-200/80 bg-white/80 px-3 py-1.5 text-center text-sm font-medium leading-normal text-zinc-600 shadow-sm backdrop-blur-sm dark:border-zinc-600/80 dark:bg-zinc-800/80 dark:text-zinc-300">
             {text}
           </div>
         </div>

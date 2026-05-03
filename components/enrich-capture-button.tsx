@@ -46,7 +46,7 @@ export function EnrichCaptureButton({ captureId, status }: Props) {
 
   return (
     <>
-      <p className="mb-1 text-center text-xs font-medium text-zinc-600 dark:text-zinc-400">
+      <p className="mb-1 text-center text-sm font-medium text-zinc-600 dark:text-zinc-400">
         Analysis failed.
       </p>
       <button
@@ -59,7 +59,7 @@ export function EnrichCaptureButton({ captureId, status }: Props) {
       </button>
       {err ? (
         <p
-          className="max-w-full text-center text-xs text-red-600 dark:text-red-400"
+          className="max-w-full text-center text-sm text-red-600 dark:text-red-400"
           role="alert"
         >
           {err}

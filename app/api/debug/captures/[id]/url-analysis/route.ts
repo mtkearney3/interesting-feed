@@ -3,7 +3,7 @@ import {
   CAPTURES_DEBUG_SELECT_EXTENDED,
   isMissingOptionalCaptureColumnError,
 } from "@/lib/captures-db-columns";
-import { supabase } from "@/lib/supabase";
+import { createRouteHandlerSupabaseClient } from "@/lib/supabase/route-handler";
 import { NextResponse } from "next/server";
 
 function debugAllowed(): boolean {
@@ -27,6 +27,14 @@ export async function GET(
   const { id } = await context.params;
   if (!id) {
     return NextResponse.json({ error: "Missing id" }, { status: 400 });
+  }
+
+  const supabase = await createRouteHandlerSupabaseClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   let q = await supabase

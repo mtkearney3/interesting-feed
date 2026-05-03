@@ -4,7 +4,7 @@ import {
   isMissingOptionalCaptureColumnError,
 } from "@/lib/captures-db-columns";
 import { answerFollowupQuestion } from "@/lib/openai-followup-answer";
-import { supabase } from "@/lib/supabase";
+import { createRouteHandlerSupabaseClient } from "@/lib/supabase/route-handler";
 import { NextResponse } from "next/server";
 
 export const maxDuration = 60;
@@ -35,6 +35,14 @@ export async function POST(
 
   if (!q) {
     return NextResponse.json({ error: "question is required" }, { status: 400 });
+  }
+
+  const supabase = await createRouteHandlerSupabaseClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   let rowQuery = await supabase

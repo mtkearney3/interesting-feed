@@ -7,6 +7,7 @@ import { CaptureFeedCard } from "@/components/capture-feed-card";
 import { CaptureDetailModal } from "@/components/capture-detail-modal";
 import { useFeedClipStatusOptional } from "@/components/feed-clip-status-context";
 import { useFeedFilterScrollOptional } from "@/components/feed-filter-scroll-context";
+import { RabbitHoleFeedEmptyState } from "@/components/rabbit-hole-feed-empty-state";
 import { RabbitHoleFeedFilterBar } from "@/components/rabbit-hole-feed-filter-bar";
 import { clipMatchesFeedFilter } from "@/lib/clip-matches-feed-filter";
 import type { CaptureRow } from "@/lib/capture";
@@ -28,6 +29,7 @@ export function CaptureFeedWithDetail({ rows }: Props) {
   const filterScroll = useFeedFilterScrollOptional();
   const clipBadgeFn = feedClipStatus?.clipBadge;
   const [selected, setSelected] = useState<CaptureRow | null>(null);
+  const [addClipRequestId, setAddClipRequestId] = useState(0);
   const [feedFilter, setFeedFilter] = useState<FeedFilterKey>(
     FEED_BUILTIN_FILTER.ALL
   );
@@ -125,9 +127,11 @@ export function CaptureFeedWithDetail({ rows }: Props) {
     return () => io.disconnect();
   }, []);
 
+  const requestOpenAddClip = () => setAddClipRequestId((n) => n + 1);
+
   return (
     <>
-      <CaptureForm />
+      <CaptureForm openAddClipRequestId={addClipRequestId} />
       <div ref={filterBarSentinelRef} className="min-w-0">
         <RabbitHoleFeedFilterBar
           selected={feedFilter}
@@ -135,7 +139,9 @@ export function CaptureFeedWithDetail({ rows }: Props) {
           topics={topicOptions}
         />
       </div>
-      {filteredRows.length === 0 && rows.length > 0 ? (
+      {rows.length === 0 ? (
+        <RabbitHoleFeedEmptyState onAddClip={requestOpenAddClip} />
+      ) : filteredRows.length === 0 ? (
         <p
           className={`rounded-xl border border-zinc-200/80 bg-zinc-50/90 px-4 py-8 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-400`}
         >

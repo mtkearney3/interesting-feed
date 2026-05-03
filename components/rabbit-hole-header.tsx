@@ -2,9 +2,10 @@
 
 import { Rabbit } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useAuth } from "@/components/auth-provider";
 import {
   countNewClipsSince,
-  RABBIT_HOLE_LAST_SEEN_KEY,
+  rabbitHoleLastSeenKeyForUser,
 } from "@/lib/rabbit-hole-feed-session";
 
 export type RabbitHoleClip = { created_at: string };
@@ -13,16 +14,31 @@ type Props = {
   clips?: RabbitHoleClip[];
   /** Scrolled: tighter vertical padding + smaller icon in parent shell. */
   compact?: boolean;
+  /** Signed-in user — scopes “last seen” / new-count localStorage. */
+  userId: string;
 };
 
 export function RabbitHoleHeader({
   clips = [],
   compact = false,
+  userId,
 }: Props) {
+  const { signOut } = useAuth();
+  const lastSeenKey = rabbitHoleLastSeenKeyForUser(userId);
   const [newCount, setNewCount] = useState<number | null>(null);
   const lastSeenRead = useRef<string | null | undefined>(undefined);
   const clipsRef = useRef<RabbitHoleClip[]>(clips);
   const didMountInit = useRef(false);
+  const prevUserIdRef = useRef(userId);
+
+  useEffect(() => {
+    if (prevUserIdRef.current !== userId) {
+      prevUserIdRef.current = userId;
+      didMountInit.current = false;
+      lastSeenRead.current = undefined;
+      setNewCount(null);
+    }
+  }, [userId]);
 
   useEffect(() => {
     clipsRef.current = clips;
@@ -30,14 +46,14 @@ export function RabbitHoleHeader({
     if (!didMountInit.current) {
       didMountInit.current = true;
       if (lastSeenRead.current === undefined) {
-        lastSeenRead.current = localStorage.getItem(RABBIT_HOLE_LAST_SEEN_KEY);
+        lastSeenRead.current = localStorage.getItem(lastSeenKey);
       }
       const prev = lastSeenRead.current;
       const n = countNewClipsSince(clipsRef.current, prev);
       setNewCount(n);
-      localStorage.setItem(RABBIT_HOLE_LAST_SEEN_KEY, new Date().toISOString());
+      localStorage.setItem(lastSeenKey, new Date().toISOString());
     }
-  }, [clips]);
+  }, [clips, lastSeenKey]);
 
   return (
     <div className={`flex gap-3 ${compact ? "items-center" : "items-start"}`}>
@@ -46,7 +62,7 @@ export function RabbitHoleHeader({
         strokeWidth={1.8}
         aria-hidden
       />
-      <div className="flex min-w-0 flex-1 flex-col justify-center">
+      <div className="flex min-w-0 min-h-0 flex-1 flex-col justify-center">
         <h1
           className={`truncate font-semibold leading-tight tracking-tight text-white ${compact ? "text-lg" : "text-xl"}`}
         >
@@ -60,10 +76,10 @@ export function RabbitHoleHeader({
             <p
               className={
                 newCount === null
-                  ? "invisible mt-0.5 text-xs leading-tight"
+                  ? "invisible mt-0.5 text-sm leading-tight"
                   : newCount > 0
-                    ? "mt-0.5 truncate text-xs font-medium leading-tight text-[color:var(--rabbit-hole-accent)]"
-                    : "mt-0.5 truncate text-xs leading-tight text-white/45"
+                    ? "mt-0.5 truncate text-sm font-medium leading-tight text-[color:var(--rabbit-hole-accent)]"
+                    : "mt-0.5 truncate text-sm leading-tight text-white/45"
               }
             >
               {newCount === null
@@ -75,6 +91,13 @@ export function RabbitHoleHeader({
           </>
         ) : null}
       </div>
+      <button
+        type="button"
+        onClick={() => void signOut()}
+        className={`shrink-0 self-start rounded-lg px-2 py-1 text-sm font-medium text-white/80 transition hover:bg-white/10 hover:text-white active:opacity-90 ${compact ? "mt-0" : "mt-1"}`}
+      >
+        Sign out
+      </button>
     </div>
   );
 }

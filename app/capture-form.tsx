@@ -18,7 +18,15 @@ function closeFormIfMobile(setFormOpen: (v: boolean) => void) {
   }
 }
 
-export function CaptureForm() {
+type CaptureFormProps = {
+  /**
+   * Parent increments this (e.g. from the feed empty state) to open the New clip
+   * panel and scroll it into view, matching the in-app “Add clip” behavior.
+   */
+  openAddClipRequestId?: number;
+};
+
+export function CaptureForm({ openAddClipRequestId = 0 }: CaptureFormProps) {
   const router = useRouter();
   const rawTextRef = useRef("");
   const [rawText, setRawText] = useState("");
@@ -37,10 +45,18 @@ export function CaptureForm() {
   const scrollAddClipIntoViewAfterOpen = useRef(false);
   const savedHideTimeoutRef = useRef<number | null>(null);
   const mountedRef = useRef(true);
+  const lastOpenAddClipRequestRef = useRef(0);
 
   useEffect(() => {
     rawTextRef.current = rawText;
   }, [rawText]);
+
+  useLayoutEffect(() => {
+    if (openAddClipRequestId <= lastOpenAddClipRequestRef.current) return;
+    lastOpenAddClipRequestRef.current = openAddClipRequestId;
+    scrollAddClipIntoViewAfterOpen.current = true;
+    setFormOpen(true);
+  }, [openAddClipRequestId]);
 
   useEffect(() => {
     const syncMoreOpen = () => {
@@ -200,6 +216,10 @@ export function CaptureForm() {
       });
 
       if (!res.ok) {
+        if (res.status === 401) {
+          setError("Sign in to save clips.");
+          return;
+        }
         setError(body.error ?? `Request failed (${res.status})`);
         return;
       }
@@ -262,7 +282,7 @@ export function CaptureForm() {
     "mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-sm text-zinc-900 shadow-sm outline-none ring-sky-500/30 placeholder:text-zinc-500 focus:border-sky-400 focus:ring-2 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-sky-600";
 
   const labelClass =
-    "text-xs font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-400";
+    "text-sm font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-400";
 
   const addClipPanelScroll =
     "scroll-mt-20 sm:scroll-mt-0";
@@ -352,22 +372,22 @@ export function CaptureForm() {
               onChange={(e) =>
                 setImageFile(e.target.files?.item(0) ?? null)
               }
-              className={`${fieldClass} py-2.5 file:mr-3 file:rounded-md file:border-0 file:bg-zinc-200 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-zinc-800 dark:file:bg-zinc-700 dark:file:text-zinc-200`}
+              className={`${fieldClass} py-2.5 file:mr-3 file:rounded-md file:border-0 file:bg-zinc-200 file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-zinc-800 dark:file:bg-zinc-700 dark:file:text-zinc-200`}
             />
-            <p className="mt-1 text-xs leading-normal text-zinc-500 dark:text-zinc-400">
+            <p className="mt-1 text-sm leading-normal text-zinc-500 dark:text-zinc-400">
               JPEG, PNG, WebP, or GIF (max 5MB). Optional unless you are not
               adding text or a URL.
             </p>
           </label>
 
-          <p className="text-xs leading-normal text-zinc-500 dark:text-zinc-400">
+          <p className="text-sm leading-normal text-zinc-500 dark:text-zinc-400">
             Clip type is set when you save: URL → url, else image →
             screenshot, else → text.
           </p>
 
           <div className="rounded-lg border border-zinc-200 dark:border-zinc-700 sm:border-0 sm:p-0">
             <details ref={moreOptionsRef} className="group">
-              <summary className="cursor-pointer list-none px-1 py-2 text-xs font-semibold text-zinc-600 marker:hidden before:content-none sm:hidden [&::-webkit-details-marker]:hidden">
+              <summary className="cursor-pointer list-none px-1 py-2 text-sm font-semibold text-zinc-600 marker:hidden before:content-none sm:hidden [&::-webkit-details-marker]:hidden">
                 <span className="text-sky-700 dark:text-sky-400">
                   Source &amp; note
                 </span>

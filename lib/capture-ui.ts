@@ -18,8 +18,8 @@ export const followUpQuestionTextClass = captureBodyCopySizeClass;
 
 /** Row metadata (type · source · date · status) and similar small lines. */
 export const captureMetadataTextSizeClass =
-  "text-xs max-md:text-sm leading-relaxed md:text-xs";
+  "text-sm leading-relaxed";
 
 /** Uppercase section headings (Follow-up questions, Your question, Keep going). */
 export const captureSectionLabelSizeClass =
-  "text-xs max-md:text-sm font-semibold uppercase leading-relaxed tracking-wide md:text-xs";
+  "text-sm font-semibold uppercase leading-relaxed tracking-wide";

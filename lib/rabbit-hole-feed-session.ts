@@ -1,8 +1,18 @@
-/** Same key as legacy header — last visit timestamp written after each feed load. */
+/** Legacy global key (pre–per-user storage). */
 export const RABBIT_HOLE_LAST_SEEN_KEY = "rabbit-hole-last-seen";
 
-/** Feed-only: clip ids the user has opened in the detail modal. */
+/** Legacy global key (pre–per-user storage). */
 export const RABBIT_HOLE_REVIEWED_CLIP_IDS_KEY = "rabbit-hole.reviewedClipIds";
+
+/** Last visit timestamp for Rabbit Hole “new clips” (per signed-in user). */
+export function rabbitHoleLastSeenKeyForUser(userId: string): string {
+  return `rabbit-hole-last-seen.${userId}`;
+}
+
+/** Reviewed clip ids in the feed (per signed-in user). */
+export function rabbitHoleReviewedClipIdsKeyForUser(userId: string): string {
+  return `rabbit-hole.reviewedClipIds.${userId}`;
+}
 
 /** Normalize clip ids for Set / localStorage (handles numeric ids from JSON). */
 export function normalizeFeedClipId(id: unknown): string {
@@ -28,10 +38,10 @@ export function isClipNewSince(
   return new Date(createdAt).getTime() > new Date(lastSeenIso).getTime();
 }
 
-export function loadReviewedClipIds(): Set<string> {
+export function loadReviewedClipIds(storageKey: string): Set<string> {
   if (typeof window === "undefined") return new Set();
   try {
-    const raw = localStorage.getItem(RABBIT_HOLE_REVIEWED_CLIP_IDS_KEY);
+    const raw = localStorage.getItem(storageKey);
     if (!raw) return new Set();
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return new Set();
@@ -46,11 +56,11 @@ export function loadReviewedClipIds(): Set<string> {
   }
 }
 
-export function persistReviewedClipIds(ids: Set<string>): void {
+export function persistReviewedClipIds(
+  ids: Set<string>,
+  storageKey: string
+): void {
   if (typeof window === "undefined") return;
   const list = [...ids].map((id) => normalizeFeedClipId(id)).filter(Boolean);
-  localStorage.setItem(
-    RABBIT_HOLE_REVIEWED_CLIP_IDS_KEY,
-    JSON.stringify(list)
-  );
+  localStorage.setItem(storageKey, JSON.stringify(list));
 }

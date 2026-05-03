@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/supabase";
+import { createRouteHandlerSupabaseClient } from "@/lib/supabase/route-handler";
 import { NextResponse } from "next/server";
 
 export async function DELETE(
@@ -8,6 +8,14 @@ export async function DELETE(
   const { id } = await context.params;
   if (!id) {
     return NextResponse.json({ error: "Missing id" }, { status: 400 });
+  }
+
+  const supabase = await createRouteHandlerSupabaseClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const { error } = await supabase.from("captures").delete().eq("id", id);
