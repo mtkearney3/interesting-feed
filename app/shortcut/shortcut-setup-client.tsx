@@ -65,7 +65,14 @@ export function ShortcutSetupClient({ endpointUrl }: Props) {
           </li>
           <li>
             Share screenshots, links, or text to Rabbit Hole — they appear in
-            your feed here.
+            your feed here. Images are normalized to PNG or JPEG on the server
+            for AI; optional JSON field{" "}
+            <code className="rounded bg-black/30 px-1">image_mime_type</code>{" "}
+            may be set to{" "}
+            <code className="rounded bg-black/30 px-1">image/jpeg</code>,{" "}
+            <code className="rounded bg-black/30 px-1">image/png</code>,{" "}
+            <code className="rounded bg-black/30 px-1">image/webp</code>, or{" "}
+            <code className="rounded bg-black/30 px-1">image/gif</code>.
           </li>
         </ol>
 

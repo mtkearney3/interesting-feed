@@ -37,14 +37,23 @@ function sniffMime(buf: Buffer): string {
   return "image/jpeg";
 }
 
+export type ForcedImageFormat = {
+  contentType: string;
+  extension: string;
+};
+
 /**
  * Upload raw image bytes to `capture-images`, under `shortcut/{userId}/` when
  * `userId` is set (token-validated shortcut flow).
+ *
+ * When `forced` is set (after OpenAI-safe normalization), use that MIME/extension
+ * instead of sniffing bytes (avoids HEIC mis-detected as JPEG, etc.).
  */
 export async function uploadCaptureImageBuffer(
   supabase: SupabaseClient,
   buf: Buffer,
-  userId: string | null
+  userId: string | null,
+  forced?: ForcedImageFormat
 ): Promise<{ image_url: string } | { error: string; status: number }> {
   if (buf.length === 0) {
     return { error: "Empty image data", status: 400 };
@@ -56,8 +65,9 @@ export async function uploadCaptureImageBuffer(
     };
   }
 
-  const mime = sniffMime(buf);
-  const ext = extFromMime(mime);
+  const mime = forced?.contentType ?? sniffMime(buf);
+  const ext =
+    forced?.extension ?? extFromMime(mime) ?? (mime === "image/gif" ? "gif" : null);
   if (!ext) {
     return { error: "Unsupported image type", status: 400 };
   }

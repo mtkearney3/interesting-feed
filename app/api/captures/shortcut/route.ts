@@ -2,6 +2,12 @@ import { computeCaptureInsertFromParsed } from "@/lib/capture-insert-compute";
 import { scheduleCaptureEnrichmentAfterResponse } from "@/lib/capture-enrich-after";
 import { parseCapturePostRequest } from "@/lib/capture-request-parse";
 import { uploadCaptureImageBuffer } from "@/lib/shortcut-capture-image-upload";
+import {
+  decodeShortcutImageBase64Field,
+  mergeShortcutImageMimeHints,
+  normalizeShortcutImageForOpenAi,
+  parseShortcutDeclaredImageMime,
+} from "@/lib/shortcut-image-normalize";
 import { getServiceSupabase } from "@/lib/supabase-service";
 
 const SHORTCUT_CORS_HEADERS = {
@@ -22,24 +28,6 @@ function jsonWithCors(
 
 export async function OPTIONS() {
   return new Response(null, { status: 204, headers: SHORTCUT_CORS_HEADERS });
-}
-
-function decodeBase64ImageField(raw: unknown): Buffer | null {
-  if (typeof raw !== "string") return null;
-  let s = raw.trim();
-  if (!s) return null;
-  const dataUrl = s.match(/^data:([^;]+);base64,(.+)/i);
-  if (dataUrl) {
-    s = dataUrl[2].replace(/\s/g, "");
-  } else {
-    s = s.replace(/\s/g, "");
-  }
-  try {
-    const buf = Buffer.from(s, "base64");
-    return buf.length > 0 ? buf : null;
-  } catch {
-    return null;
-  }
 }
 
 export async function POST(request: Request) {
@@ -88,14 +76,49 @@ export async function POST(request: Request) {
     const existingUrl =
       typeof rawBody.image_url === "string" ? rawBody.image_url.trim() : "";
     if (!existingUrl) {
-      const buf = decodeBase64ImageField(b64);
-      if (!buf) {
+      const decoded = decodeShortcutImageBase64Field(b64);
+      if (!decoded) {
+        console.warn("[shortcut-capture] image_base64 rejected", {
+          stringLen: b64.length,
+        });
         return jsonWithCors(
-          { error: "Could not decode image_base64.", code: "bad_image" },
+          {
+            error:
+              "image_base64 is missing, too short, or not valid base64. Send a real screenshot (optionally as data:image/png;base64,... or data:image/jpeg;base64,...). HEIC and other formats are converted server-side when decodable.",
+            code: "bad_image",
+          },
           { status: 400 }
         );
       }
-      const up = await uploadCaptureImageBuffer(service, buf, ownerUserId);
+
+      const bodyMime = parseShortcutDeclaredImageMime(rawBody);
+      const mergedMime = mergeShortcutImageMimeHints(
+        bodyMime,
+        decoded.dataUrlMime
+      );
+      const normalized = await normalizeShortcutImageForOpenAi(
+        decoded.buffer,
+        mergedMime
+      );
+      if (!normalized.ok) {
+        console.error("[shortcut-capture] image normalize failed", {
+          error: normalized.error,
+        });
+        return jsonWithCors(
+          { error: normalized.error, code: "bad_image" },
+          { status: 400 }
+        );
+      }
+
+      const up = await uploadCaptureImageBuffer(
+        service,
+        normalized.buffer,
+        ownerUserId,
+        {
+          contentType: normalized.contentType,
+          extension: normalized.extension,
+        }
+      );
       if ("error" in up) {
         return jsonWithCors({ error: up.error }, { status: up.status });
       }
