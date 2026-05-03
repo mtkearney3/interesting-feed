@@ -16,6 +16,8 @@ const SHORTCUT_CORS_HEADERS = {
   "Access-Control-Allow-Headers": "Content-Type",
 } as const;
 
+const LOG = "[shortcut-capture]";
+
 function jsonWithCors(
   body: unknown,
   init?: { status?: number; headers?: HeadersInit }
@@ -31,8 +33,11 @@ export async function OPTIONS() {
 }
 
 export async function POST(request: Request) {
+  console.log(`${LOG} request received`, { method: "POST" });
+
   const service = getServiceSupabase();
   if (!service) {
+    console.error(`${LOG} service role client unavailable`);
     return jsonWithCors(
       {
         error:
@@ -46,6 +51,7 @@ export async function POST(request: Request) {
   const reqUrl = new URL(request.url);
   const token = reqUrl.searchParams.get("token")?.trim() ?? "";
   if (!token) {
+    console.warn(`${LOG} missing token query param`);
     return jsonWithCors(
       { error: "Missing token query parameter.", code: "missing_token" },
       { status: 401 }
@@ -60,6 +66,10 @@ export async function POST(request: Request) {
     .maybeSingle();
 
   if (tokErr || !tokRow?.user_id) {
+    console.warn(`${LOG} token invalid or lookup error`, {
+      tokErr: tokErr?.message ?? null,
+      hasRow: Boolean(tokRow),
+    });
     return jsonWithCors(
       { error: "Invalid or revoked shortcut token.", code: "invalid_token" },
       { status: 401 }
@@ -67,62 +77,86 @@ export async function POST(request: Request) {
   }
 
   const ownerUserId = String(tokRow.user_id);
+  console.log(`${LOG} token valid`, { user_id: ownerUserId });
 
   const parsed = await parseCapturePostRequest(request);
   const rawBody = { ...parsed.rawBody };
+  const bodyKeys = Object.keys(rawBody);
+  console.log(`${LOG} body keys`, { keys: bodyKeys });
+
+  const hasImageB64 =
+    typeof rawBody.image_base64 === "string" && rawBody.image_base64.trim();
+  console.log(`${LOG} image_base64 present`, { present: Boolean(hasImageB64) });
+
+  /** Set when we tried to process an image and decode/normalize/upload failed. */
+  let imagePipelineFailure: string | null = null;
+  let attemptedImageIngest = false;
 
   const b64 = rawBody.image_base64;
   if (typeof b64 === "string" && b64.trim()) {
     const existingUrl =
       typeof rawBody.image_url === "string" ? rawBody.image_url.trim() : "";
     if (!existingUrl) {
+      attemptedImageIngest = true;
       const decoded = decodeShortcutImageBase64Field(b64);
       if (!decoded) {
-        console.warn("[shortcut-capture] image_base64 rejected", {
+        imagePipelineFailure = `decode rejected (stringLen=${b64.length})`;
+        console.warn(`${LOG} image_base64 decode rejected`, {
           stringLen: b64.length,
         });
-        return jsonWithCors(
-          {
-            error:
-              "image_base64 is missing, too short, or not valid base64. Send a real screenshot (optionally as data:image/png;base64,... or data:image/jpeg;base64,...). HEIC and other formats are converted server-side when decodable.",
-            code: "bad_image",
-          },
-          { status: 400 }
-        );
-      }
-
-      const bodyMime = parseShortcutDeclaredImageMime(rawBody);
-      const mergedMime = mergeShortcutImageMimeHints(
-        bodyMime,
-        decoded.dataUrlMime
-      );
-      const normalized = await normalizeShortcutImageForOpenAi(
-        decoded.buffer,
-        mergedMime
-      );
-      if (!normalized.ok) {
-        console.error("[shortcut-capture] image normalize failed", {
-          error: normalized.error,
+      } else {
+        console.log(`${LOG} base64 decoded`, {
+          byteLength: decoded.buffer.length,
+          dataUrlMime: decoded.dataUrlMime,
         });
-        return jsonWithCors(
-          { error: normalized.error, code: "bad_image" },
-          { status: 400 }
-        );
-      }
 
-      const up = await uploadCaptureImageBuffer(
-        service,
-        normalized.buffer,
-        ownerUserId,
-        {
-          contentType: normalized.contentType,
-          extension: normalized.extension,
+        const bodyMime = parseShortcutDeclaredImageMime(rawBody);
+        const mergedMime = mergeShortcutImageMimeHints(
+          bodyMime,
+          decoded.dataUrlMime
+        );
+        console.log(`${LOG} image mime hints`, {
+          bodyMime,
+          mergedMime,
+        });
+
+        const normalized = await normalizeShortcutImageForOpenAi(
+          decoded.buffer,
+          mergedMime
+        );
+        if (!normalized.ok) {
+          imagePipelineFailure = `normalize: ${normalized.error}`;
+          console.error(`${LOG} normalization failed`, {
+            error: normalized.error,
+          });
+        } else {
+          console.log(`${LOG} normalization ok`, {
+            contentType: normalized.contentType,
+            extension: normalized.extension,
+            outByteLength: normalized.buffer.length,
+          });
+
+          const up = await uploadCaptureImageBuffer(
+            service,
+            normalized.buffer,
+            ownerUserId,
+            {
+              contentType: normalized.contentType,
+              extension: normalized.extension,
+            }
+          );
+          if ("error" in up) {
+            imagePipelineFailure = `upload: ${up.error}`;
+            console.error(`${LOG} upload failed`, {
+              error: up.error,
+              status: up.status,
+            });
+          } else {
+            rawBody.image_url = up.image_url;
+            console.log(`${LOG} uploaded image`, { image_url: up.image_url });
+          }
         }
-      );
-      if ("error" in up) {
-        return jsonWithCors({ error: up.error }, { status: up.status });
       }
-      rawBody.image_url = up.image_url;
     }
     delete rawBody.image_base64;
   }
@@ -138,6 +172,69 @@ export async function POST(request: Request) {
   });
 
   if (!computed.ok) {
+    if (imagePipelineFailure) {
+      console.warn(`${LOG} compute returned no_content after image failure; inserting fallback clip`, {
+        computeCode: computed.code,
+        imagePipelineFailure,
+      });
+      const note = `[shortcut-image] ${imagePipelineFailure}`.slice(0, 3900);
+      const userNote =
+        typeof rawBody.user_note === "string" && rawBody.user_note.trim()
+          ? rawBody.user_note.trim().slice(0, 4000)
+          : null;
+
+      const { data, error } = await service
+        .from("captures")
+        .insert({
+          user_id: ownerUserId,
+          raw_text: `[iPhone Shortcut] Image could not be processed (${imagePipelineFailure}). Add text or a URL in the Shortcut if you want a full clip next time.`.slice(
+            0,
+            80_000
+          ),
+          url: null,
+          source: "ios_share",
+          user_note: userNote,
+          capture_type: "text",
+          image_url: null,
+          status: "error",
+          ai_related_notes: note,
+        })
+        .select(
+          "id, raw_text, url, source, user_note, capture_type, image_url, status, created_at"
+        )
+        .single();
+
+      if (error) {
+        console.error(`${LOG} fallback insert failed`, {
+          message: error.message,
+          code: error.code,
+        });
+        return jsonWithCors(
+          {
+            error: "Capture could not be saved (fallback after image error).",
+            message: error.message,
+            code: error.code,
+          },
+          { status: 500 }
+        );
+      }
+
+      console.log(`${LOG} fallback insert ok`, {
+        capture_id: data.id,
+        status: data.status,
+      });
+
+      return jsonWithCors(
+        {
+          ok: true,
+          capture: data,
+          shortcut_image_warning: imagePipelineFailure,
+        },
+        { status: 201 }
+      );
+    }
+
+    console.warn(`${LOG} compute failed`, { code: computed.code });
     return jsonWithCors(
       {
         error: computed.error,
@@ -170,7 +267,10 @@ export async function POST(request: Request) {
     .single();
 
   if (error) {
-    console.error("[shortcut-capture] insert failed", error.message);
+    console.error(`${LOG} insert failed`, {
+      message: error.message,
+      code: error.code,
+    });
     return jsonWithCors(
       {
         error: "Capture could not be saved.",
@@ -184,12 +284,23 @@ export async function POST(request: Request) {
     );
   }
 
+  console.log(`${LOG} insert ok`, {
+    capture_id: data.id,
+    status: data.status,
+    has_image_url: Boolean(insert.image_url),
+    attemptedImageIngest,
+    imagePipelineFailure,
+  });
+
   scheduleCaptureEnrichmentAfterResponse(data.id);
 
   return jsonWithCors(
     {
       ok: true,
       capture: data,
+      ...(imagePipelineFailure && attemptedImageIngest
+        ? { shortcut_image_warning: imagePipelineFailure }
+        : {}),
     },
     { status: 201 }
   );
