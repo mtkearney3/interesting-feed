@@ -64,17 +64,55 @@ export function ShortcutSetupClient({ endpointUrl }: Props) {
             When prompted, paste your personal Rabbit Hole endpoint (above).
           </li>
           <li>
-            Share screenshots, links, or text to Rabbit Hole — they appear in
-            your feed here. Images are normalized to PNG or JPEG on the server
-            for AI; optional JSON field{" "}
-            <code className="rounded bg-black/30 px-1">image_mime_type</code>{" "}
-            may be set to{" "}
-            <code className="rounded bg-black/30 px-1">image/jpeg</code>,{" "}
+            Use two Shortcut branches so the server can classify clips
+            correctly:
+          </li>
+        </ol>
+
+        <div className="mt-6 max-w-xl space-y-4 rounded-2xl border border-white/10 bg-black/20 p-4 text-xs leading-relaxed text-white/80 sm:text-sm">
+          <p className="font-semibold text-white/90">URL / link share (POST JSON)</p>
+          <p>
+            Send the shared link only — do{" "}
+            <span className="font-semibold text-amber-200/90">not</span> include{" "}
+            <code className="rounded bg-black/30 px-1">image_base64</code>. Optional{" "}
+            <code className="rounded bg-black/30 px-1">image_url</code> may be a
+            page preview; analysis uses the article text first. For{" "}
+            <span className="font-semibold">X (Twitter)</span> links, add optional{" "}
+            <code className="rounded bg-black/30 px-1">raw_text</code> (e.g. from the
+            share sheet) so Rabbit Hole can analyze the post text when X does not
+            expose it in the page HTML.
+          </p>
+          <pre className="overflow-x-auto rounded-lg bg-black/35 p-3 text-[11px] text-white/90 sm:text-xs">
+{`{
+  "url": "https://example.com/article",
+  "source": "ios_share",
+  "capture_type": "url"
+}`}
+          </pre>
+
+          <p className="pt-2 font-semibold text-white/90">Screenshot / image share (POST JSON)</p>
+          <p>
+            Send base64 image data and mark as screenshot. Do not add a web
+            article URL in the same request unless you intend a screenshot clip
+            with extra context.
+          </p>
+          <pre className="overflow-x-auto rounded-lg bg-black/35 p-3 text-[11px] text-white/90 sm:text-xs">
+{`{
+  "image_base64": "<Base64>",
+  "source": "ios_share",
+  "capture_type": "screenshot"
+}`}
+          </pre>
+
+          <p className="pt-2 text-white/70">
+            Images are normalized to PNG or JPEG on the server for AI; optional{" "}
+            <code className="rounded bg-black/30 px-1">image_mime_type</code> may
+            be <code className="rounded bg-black/30 px-1">image/jpeg</code>,{" "}
             <code className="rounded bg-black/30 px-1">image/png</code>,{" "}
             <code className="rounded bg-black/30 px-1">image/webp</code>, or{" "}
             <code className="rounded bg-black/30 px-1">image/gif</code>.
-          </li>
-        </ol>
+          </p>
+        </div>
 
         <p className="mt-8 text-xs text-white/50">
           Keep this URL private. Anyone with the link could add clips to your

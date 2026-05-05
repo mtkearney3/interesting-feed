@@ -11,6 +11,10 @@ import {
 export const EnrichPipeline = {
   URL_ARTICLE_TEXT_ONLY: "URL_ARTICLE_TEXT_ONLY",
   URL_ARTICLE_INSUFFICIENT: "URL_ARTICLE_INSUFFICIENT",
+  /** X/Twitter: user-supplied raw_text was the primary OpenAI input. */
+  URL_ARTICLE_X_RAW_PRIMARY: "URL_ARTICLE_X_RAW_PRIMARY",
+  /** X/Twitter: link saved but page text unusable; see ai_summary for guidance. */
+  URL_ARTICLE_X_INSUFFICIENT: "URL_ARTICLE_X_INSUFFICIENT",
   IMAGE_VISION: "IMAGE_VISION",
   IMAGE_SCREENSHOT_TEXT_PRIMARY: "IMAGE_SCREENSHOT_TEXT_PRIMARY",
   TEXT_ONLY: "TEXT_ONLY",

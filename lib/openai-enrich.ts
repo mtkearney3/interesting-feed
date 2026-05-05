@@ -8,7 +8,9 @@ import { EnrichPipeline } from "@/lib/captures-enrich-pipeline";
 import {
   extractUrlArticleCapture,
   MIN_URL_ARTICLE_CHARS,
+  type UrlArticleCaptureResult,
 } from "@/lib/url-article-capture";
+import { isTwitterOrXArticleUrl } from "@/lib/twitter-url";
 import {
   assertUrlArticleOpenAiPayloadNoImageApi,
   logUrlArticlePayloadGuardOk,
@@ -29,6 +31,8 @@ export type EnrichmentResult = {
    * URL article path only: full extracted article body for follow-ups (not shown as user paste).
    */
   url_article_text?: string | null;
+  /** When set, {@link runCaptureEnrichment} persists this instead of default `ready`. */
+  suggested_status?: "ready" | "error";
 };
 
 export type CaptureEnrichInput = {
@@ -180,6 +184,13 @@ function parseEnrichmentJson(raw: string): EnrichmentResult {
 const URL_ARTICLE_INSUFFICIENT_USER_MESSAGE =
   "I couldn't extract enough readable article text from this URL to analyze it reliably. The link was saved, but the AI analysis is limited. Please open the article or paste the article text if you want a full analysis.";
 
+const X_TWITTER_INSUFFICIENT_USER_MESSAGE =
+  "Rabbit Hole saved this X post, but X does not expose enough readable text from the link alone. Share a screenshot of the post for full analysis.";
+
+/** Minimum length for Shortcut/shared text to count as primary input for X posts. */
+const MIN_X_READABLE_RAW_CHARS = 40;
+const MIN_X_READABLE_META_CHARS = 40;
+
 function sanitizeSaverNoteForUrlPayload(note: string | null | undefined): string {
   const t = (note ?? "").trim().slice(0, 2500);
   if (!t) return "(none)";
@@ -209,26 +220,107 @@ function hostnameFromUrl(urlStr: string): string {
   }
 }
 
+type InsufficientUrlArticleOpts = {
+  /** X/Twitter: use X-specific copy and category; may set suggested_status. */
+  twitter?: boolean;
+  suggested_status?: "ready" | "error";
+};
+
 function insufficientUrlArticleEnrichment(
   extractedTitle: string,
   fallbackUrl: string,
-  reason: string | null
+  reason: string | null,
+  opts?: InsufficientUrlArticleOpts
 ): EnrichmentResult {
   const title =
     extractedTitle.trim() || hostnameFromUrl(fallbackUrl.trim()) || "Saved link";
+  const twitter = Boolean(opts?.twitter);
+  const userMsg = twitter
+    ? X_TWITTER_INSUFFICIENT_USER_MESSAGE
+    : URL_ARTICLE_INSUFFICIENT_USER_MESSAGE;
+  const notePrefix = twitter ? "[x-twitter]" : "[url-article]";
+  const reasonLine = reason ? `${notePrefix} ${reason}` : `${notePrefix} insufficient_extracted_text`;
   return {
-    ai_title: title.slice(0, 200) || "Saved link",
-    ai_summary: URL_ARTICLE_INSUFFICIENT_USER_MESSAGE,
-    ai_why_interesting: URL_ARTICLE_INSUFFICIENT_USER_MESSAGE,
-    ai_category: "general",
-    ai_insight_score: 1,
+    ai_title: (twitter ? title.slice(0, 200) || "X post" : title.slice(0, 200)) || "Saved link",
+    ai_summary: userMsg,
+    ai_why_interesting: userMsg,
+    ai_category: twitter ? "X post" : "general",
+    ai_insight_score: twitter && opts?.suggested_status === "error" ? 1 : 2,
     ai_followup_questions: [],
-    ai_related_notes: reason
-      ? `[url-article] ${reason}`
-      : "[url-article] insufficient_extracted_text",
-    last_enrichment_pipeline: EnrichPipeline.URL_ARTICLE_INSUFFICIENT,
+    ai_related_notes: reasonLine,
+    last_enrichment_pipeline: twitter
+      ? EnrichPipeline.URL_ARTICLE_X_INSUFFICIENT
+      : EnrichPipeline.URL_ARTICLE_INSUFFICIENT,
     url_article_text: null,
+    ...(twitter && opts?.suggested_status
+      ? { suggested_status: opts.suggested_status }
+      : {}),
   };
+}
+
+async function enrichTwitterUrlUsingRawText(
+  capture: CaptureEnrichInput,
+  trimmedUrl: string,
+  extracted: UrlArticleCaptureResult,
+  rawPrimary: string,
+  signal: AbortSignal
+): Promise<EnrichmentResult> {
+  const excerpt = extracted.articleText.trim().slice(0, 8_000);
+  const titleHint = extracted.title.trim() || "(none)";
+  const userContent = [
+    `Link: ${trimmedUrl}`,
+    `Page-detected title (often generic on X): ${titleHint}`,
+    "",
+    "Short excerpt from page HTML if any (X usually hides post text here):",
+    excerpt || "(none)",
+    "",
+    "═══ Primary input: text the user saved with this post (treat as the post / context) ═══",
+    rawPrimary,
+  ].join("\n");
+
+  const system =
+    "The user saved a link to X (Twitter). The PRIMARY source is the section marked 'Primary input': " +
+    "that text came from the user's client (Share Sheet / Shortcut) and may contain the post, repost text, handles, or commentary. " +
+    "The page title and HTML excerpt are often incomplete — use them only as weak hints. " +
+    "Do not claim to see images or media not described in the primary text. " +
+    "Respond with a single JSON object only (no markdown). Use exactly these keys: " +
+    "description (1-2 sentences), summary (2-5 sentences), key_points (array of 4-8 strings), " +
+    "why_it_matters (1-3 sentences), topics (array of short topic strings), " +
+    "bias_or_framing_notes (1-3 sentences or empty string), follow_up_questions (array of 2-4 strings). " +
+    "Optional: title (short headline; omit if redundant). " +
+    "All keys are required; follow_up_questions may be an empty array only if impossible.";
+
+  try {
+    const raw = await chatCompletionsEnrichmentJson(
+      system,
+      userContent,
+      signal,
+      {
+        clipId: capture.id,
+        articleTextLength: rawPrimary.length,
+        articleTextFirst1000: rawPrimary.slice(0, 1000),
+        articleTextForWarnings: rawPrimary,
+      }
+    );
+    const parsed = parseUrlArticleEnrichmentResponse(raw, titleHint);
+    return {
+      ...parsed,
+      ai_category: "X post",
+      last_enrichment_pipeline: EnrichPipeline.URL_ARTICLE_X_RAW_PRIMARY,
+      url_article_text: rawPrimary,
+    };
+  } catch (e) {
+    console.warn("X_RAW_PRIMARY_OPENAI_FAILED", {
+      clipId: capture.id ?? null,
+      message: e instanceof Error ? e.message : String(e),
+    });
+    return insufficientUrlArticleEnrichment(
+      titleHint === "(none)" ? "X post" : titleHint,
+      trimmedUrl,
+      "x_twitter_openai_failed",
+      { twitter: true, suggested_status: "ready" }
+    );
+  }
 }
 
 function parseUrlArticleEnrichmentResponse(
@@ -446,10 +538,73 @@ export async function enrichUrlClipTextOnly(
       (!extracted.ok ? "fetch_or_parse_failed" : null),
   });
 
-  if (
-    !extracted.ok ||
-    extracted.articleText.length < MIN_URL_ARTICLE_CHARS
-  ) {
+  const isX = isTwitterOrXArticleUrl(trimmedUrl);
+  const rawStrippedX = stripStorageUrlsFromRawText(capture.raw_text, null).trim();
+  const rawReadableForX = rawStrippedX.length >= MIN_X_READABLE_RAW_CHARS;
+  const metaCombinedX = [extracted.title?.trim(), extracted.articleText?.trim()]
+    .filter(Boolean)
+    .join("\n\n")
+    .trim();
+  const metaReadableForX = metaCombinedX.length >= MIN_X_READABLE_META_CHARS;
+
+  const insufficientArticle =
+    !extracted.ok || extracted.articleText.length < MIN_URL_ARTICLE_CHARS;
+
+  if (insufficientArticle && isX) {
+    if (rawReadableForX) {
+      console.log("URL_CAPTURE_ENRICH_SUMMARY", {
+        clipId: capture.id ?? null,
+        url: trimmedUrl,
+        extractedArticleTextLength: extracted.articleText.length,
+        primaryInputUsed: "x_twitter_raw_text_primary",
+        usedRawText: true,
+        usedImage: false,
+        imageFallbackUsed: false,
+        pipeline: EnrichPipeline.URL_ARTICLE_X_RAW_PRIMARY,
+      });
+      return enrichTwitterUrlUsingRawText(
+        capture,
+        trimmedUrl,
+        extracted,
+        rawStrippedX,
+        fetchSignal
+      );
+    }
+
+    console.log("URL_CAPTURE_ENRICH_SUMMARY", {
+      clipId: capture.id ?? null,
+      url: trimmedUrl,
+      extractedArticleTextLength: extracted.articleText.length,
+      primaryInputUsed: "none_insufficient_x_twitter",
+      usedRawText: false,
+      usedImage: false,
+      imageFallbackUsed: false,
+      pipeline: EnrichPipeline.URL_ARTICLE_X_INSUFFICIENT,
+      metaReadableForX,
+    });
+
+    if (metaReadableForX) {
+      return insufficientUrlArticleEnrichment(
+        extracted.title || hostnameFromUrl(trimmedUrl),
+        trimmedUrl,
+        extracted.extractionFailedReason ||
+          extracted.fetchError ||
+          "insufficient_x_with_meta_only",
+        { twitter: true, suggested_status: "ready" }
+      );
+    }
+
+    return insufficientUrlArticleEnrichment(
+      extracted.title || hostnameFromUrl(trimmedUrl),
+      trimmedUrl,
+      extracted.extractionFailedReason ||
+        extracted.fetchError ||
+        "insufficient_x_no_text",
+      { twitter: true, suggested_status: "error" }
+    );
+  }
+
+  if (!extracted.ok || extracted.articleText.length < MIN_URL_ARTICLE_CHARS) {
     const rawAsideForLog = stripStorageUrlsFromRawText(
       capture.raw_text,
       null

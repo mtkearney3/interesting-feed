@@ -70,11 +70,17 @@ export function resolveCaptureInsertFromBody(
     typeof rawBody.capture_type === "string"
       ? rawBody.capture_type.trim().toLowerCase()
       : "";
-  /** URL is the primary payload (not a screenshot clip with an extra context link). */
+  const explicitImageClip =
+    bodyCaptureTypeEarly === "screenshot" || bodyCaptureTypeEarly === "image";
+  const explicitUrlClip =
+    bodyCaptureTypeEarly === "url" || bodyCaptureTypeEarly === "link";
+
+  const hasUrl = trimmedUrl.length > 0;
+  /** URL share (not image-primary): allow ios_share without rewriting to ios_url_share when a preview image exists. */
   const urlPrimaryForSource =
     !imgTrim ||
-    bodyCaptureTypeEarly === "url" ||
-    bodyCaptureTypeEarly === "link";
+    explicitUrlClip ||
+    (hasUrl && !explicitImageClip);
 
   if (trimmedUrl && urlPrimaryForSource) {
     const rawSrc =
@@ -88,7 +94,6 @@ export function resolveCaptureInsertFromBody(
   }
 
   const hasRaw = trimmedRaw.length > 0;
-  const hasUrl = trimmedUrl.length > 0;
   const hasImage = Boolean(trimmedImage);
 
   const bodyCaptureType =
@@ -97,10 +102,15 @@ export function resolveCaptureInsertFromBody(
       : "";
   const allowedTypes: CaptureType[] = ["link", "url", "text", "screenshot"];
 
+  const urlPrimaryForType =
+    explicitUrlClip || (hasUrl && !explicitImageClip);
+
   let resolvedType: CaptureType;
-  if (hasImage) {
+  if (urlPrimaryForType && hasUrl) {
+    resolvedType = "url";
+  } else if (hasImage) {
     resolvedType =
-      bodyCaptureType === "screenshot"
+      bodyCaptureTypeEarly === "screenshot"
         ? "screenshot"
         : inferCaptureTypeFromContent(true);
   } else if (hasUrl) {

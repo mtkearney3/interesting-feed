@@ -1,5 +1,6 @@
 import { computeCaptureInsertFromParsed } from "@/lib/capture-insert-compute";
 import { scheduleCaptureEnrichmentAfterResponse } from "@/lib/capture-enrich-after";
+import { getCaptureKind } from "@/lib/capture-kind";
 import { parseCapturePostRequest } from "@/lib/capture-request-parse";
 import { uploadCaptureImageBuffer } from "@/lib/shortcut-capture-image-upload";
 import {
@@ -8,6 +9,7 @@ import {
   normalizeShortcutImageForOpenAi,
   parseShortcutDeclaredImageMime,
 } from "@/lib/shortcut-image-normalize";
+import { normalizeShortcutCaptureBody } from "@/lib/shortcut-capture-normalize";
 import { getServiceSupabase } from "@/lib/supabase-service";
 
 const SHORTCUT_CORS_HEADERS = {
@@ -82,11 +84,39 @@ export async function POST(request: Request) {
   const parsed = await parseCapturePostRequest(request);
   const rawBody = { ...parsed.rawBody };
   const bodyKeys = Object.keys(rawBody);
+  const bodyCaptureTypeLower = String(rawBody.capture_type ?? "")
+    .trim()
+    .toLowerCase();
+  const explicitImageClip =
+    bodyCaptureTypeLower === "screenshot" || bodyCaptureTypeLower === "image";
+  const explicitUrlClip =
+    bodyCaptureTypeLower === "url" || bodyCaptureTypeLower === "link";
+  const normForUrlGate = normalizeShortcutCaptureBody(rawBody);
+  const urlPrimaryShortcut =
+    explicitUrlClip ||
+    (Boolean(normForUrlGate.url.trim()) && !explicitImageClip);
+
   console.log(`${LOG} body keys`, { keys: bodyKeys });
+  console.log(`${LOG} body.capture_type`, {
+    capture_type: rawBody.capture_type ?? null,
+    urlPrimaryShortcut,
+    normalized_url_present: Boolean(normForUrlGate.url.trim()),
+  });
+
+  const hasImageB64Initial =
+    typeof rawBody.image_base64 === "string" && Boolean(rawBody.image_base64.trim());
+  console.log(`${LOG} image_base64 present`, { present: hasImageB64Initial });
+
+  if (urlPrimaryShortcut && hasImageB64Initial) {
+    console.log(`${LOG} url-primary: skipping image_base64 ingest`, {
+      capture_type: rawBody.capture_type ?? null,
+      url_preview: normForUrlGate.url.slice(0, 160),
+    });
+    delete rawBody.image_base64;
+  }
 
   const hasImageB64 =
     typeof rawBody.image_base64 === "string" && rawBody.image_base64.trim();
-  console.log(`${LOG} image_base64 present`, { present: Boolean(hasImageB64) });
 
   /** Set when we tried to process an image and decode/normalize/upload failed. */
   let imagePipelineFailure: string | null = null;
@@ -234,7 +264,13 @@ export async function POST(request: Request) {
       );
     }
 
-    console.warn(`${LOG} compute failed`, { code: computed.code });
+    console.warn(`${LOG} compute failed`, {
+      code: computed.code,
+      body_capture_type: rawBody.capture_type ?? null,
+      urlPrimaryShortcut,
+      has_image_base64_request: hasImageB64Initial,
+      body_keys: bodyKeys,
+    });
     return jsonWithCors(
       {
         error: computed.error,
@@ -248,6 +284,13 @@ export async function POST(request: Request) {
   }
 
   const { insert, norm, normalizedBody, debugRequested } = computed;
+
+  const enrichPreview = getCaptureKind({
+    capture_type: String(insert.capture_type ?? ""),
+    url: insert.url,
+    image_url: insert.image_url,
+    raw_text: insert.raw_text,
+  });
 
   const { data, error } = await service
     .from("captures")
@@ -287,6 +330,15 @@ export async function POST(request: Request) {
   console.log(`${LOG} insert ok`, {
     capture_id: data.id,
     status: data.status,
+    body_keys: bodyKeys,
+    body_capture_type: rawBody.capture_type ?? null,
+    has_image_base64_request: hasImageB64Initial,
+    has_url: Boolean(String(insert.url ?? "").trim()),
+    final_capture_type: insert.capture_type,
+    final_url: insert.url ? String(insert.url).slice(0, 240) : null,
+    final_image_url_present: Boolean(String(insert.image_url ?? "").trim()),
+    enrich_kind: enrichPreview.kind,
+    enrich_pipeline: enrichPreview.pipeline,
     has_image_url: Boolean(insert.image_url),
     attemptedImageIngest,
     imagePipelineFailure,

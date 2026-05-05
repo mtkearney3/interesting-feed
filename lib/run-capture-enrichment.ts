@@ -1,10 +1,12 @@
 import { getCaptureKind, isStorageImageUrl } from "@/lib/capture-kind";
+import { isTwitterOrXArticleUrl } from "@/lib/twitter-url";
 import { describeCaptureEnrichBranch } from "@/lib/captures-enrich-pipeline";
 import {
   CAPTURES_ENRICH_FETCH_SELECT,
   isMissingOptionalCaptureColumnError,
 } from "@/lib/captures-db-columns";
 import { enrichCaptureWithOpenAI } from "@/lib/openai-enrich";
+import { EnrichPipeline } from "@/lib/captures-enrich-pipeline";
 import { getServiceSupabase } from "@/lib/supabase-service";
 
 const ENRICH_NOTE_PREFIX = "[enrichment] ";
@@ -246,9 +248,20 @@ export async function runCaptureEnrichment(
         ai_insight_score: enriched.ai_insight_score,
         ai_followup_questions: enriched.ai_followup_questions,
         ai_related_notes: enriched.ai_related_notes,
-        status: "ready",
+        status: enriched.suggested_status ?? "ready",
         last_enrichment_pipeline: enriched.last_enrichment_pipeline,
       };
+
+      const rowUrlForSource = String(row.url ?? "").trim();
+      if (
+        isTwitterOrXArticleUrl(rowUrlForSource) &&
+        (enriched.last_enrichment_pipeline ===
+          EnrichPipeline.URL_ARTICLE_X_INSUFFICIENT ||
+          enriched.last_enrichment_pipeline ===
+            EnrichPipeline.URL_ARTICLE_X_RAW_PRIMARY)
+      ) {
+        updatePayload.source = "x_post";
+      }
       if (hasArticleUrl) {
         updatePayload.url_article_text = enriched.url_article_text ?? null;
       }

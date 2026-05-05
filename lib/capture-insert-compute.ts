@@ -79,10 +79,15 @@ export function computeCaptureInsertFromParsed(
     typeof rawBody.capture_type === "string"
       ? rawBody.capture_type.trim().toLowerCase()
       : "";
-  const urlSharePrimary =
-    !hasImage ||
-    bodyCaptureTypeLower === "url" ||
-    bodyCaptureTypeLower === "link";
+  const explicitImageClip =
+    bodyCaptureTypeLower === "screenshot" || bodyCaptureTypeLower === "image";
+  const explicitUrlClip =
+    bodyCaptureTypeLower === "url" || bodyCaptureTypeLower === "link";
+
+  const urlSharePrimaryFor = (urlStr: string) =>
+    explicitUrlClip || (Boolean(urlStr.trim()) && !explicitImageClip);
+
+  let urlSharePrimary = urlSharePrimaryFor(normalizedUrl);
 
   if (normalizedUrl && urlSharePrimary) {
     finalCaptureType = "url";
@@ -107,6 +112,7 @@ export function computeCaptureInsertFromParsed(
     if (normalizedUrl && !normalizedRawText.trim()) {
       normalizedRawText = normalizedUrl;
     }
+    urlSharePrimary = urlSharePrimaryFor(normalizedUrl);
     if (normalizedUrl && urlSharePrimary) {
       finalCaptureType = "url";
       if (isManual) finalSource = "manual";
