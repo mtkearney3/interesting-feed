@@ -285,6 +285,23 @@ export async function POST(request: Request) {
 
   const { insert, norm, normalizedBody, debugRequested } = computed;
 
+  if (explicitImageClip) {
+    const rawUrl = rawBody.url;
+    console.log(`${LOG} screenshot_insert_trace`, {
+      body_keys: bodyKeys,
+      body_url:
+        typeof rawUrl === "string"
+          ? rawUrl.slice(0, 400)
+          : rawUrl === undefined
+            ? undefined
+            : String(rawUrl),
+      body_url_type: typeof rawUrl,
+      body_capture_type: rawBody.capture_type ?? null,
+      insert_url: insert.url,
+      insert_capture_type: insert.capture_type,
+    });
+  }
+
   const enrichPreview = getCaptureKind({
     capture_type: String(insert.capture_type ?? ""),
     url: insert.url,

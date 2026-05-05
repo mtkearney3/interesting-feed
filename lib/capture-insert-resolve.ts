@@ -43,6 +43,16 @@ export function resolveCaptureInsertFromBody(
 ): CaptureInsertResolved {
   const rawJson = JSON.stringify(rawBody);
   const norm = normalizeShortcutCaptureBody(rawBody);
+  const bodyCaptureType =
+    typeof rawBody.capture_type === "string"
+      ? rawBody.capture_type.trim()
+      : "";
+  const bodyCaptureTypeLower = bodyCaptureType.toLowerCase();
+  const explicitImageClip =
+    bodyCaptureTypeLower === "screenshot" || bodyCaptureTypeLower === "image";
+  const explicitUrlClip =
+    bodyCaptureTypeLower === "url" || bodyCaptureTypeLower === "link";
+
   const stringScanMatch = rawJson.match(/https?:\/\/[^\s"]+/i);
   let trimmedUrl = norm.url.trim();
   if (!trimmedUrl && stringScanMatch?.[0]) {
@@ -54,26 +64,23 @@ export function resolveCaptureInsertFromBody(
     if (loose?.[0]) trimmedUrl = stripUrlScanTrailingJunk(loose[0]);
   }
 
-  if (trimmedUrl && isStorageImageUrl(trimmedUrl)) {
+  /** Raster-looking URLs are not article pages — unless this is an image clip keeping `url` as reference. */
+  if (trimmedUrl && isStorageImageUrl(trimmedUrl) && !explicitImageClip) {
     trimmedUrl = "";
   }
 
   const trimmedRaw = norm.raw_text.trim();
   const trimmedImage = norm.image_url;
   const imgTrim = (trimmedImage ?? "").trim();
-  if (imgTrim && trimmedUrl && (trimmedUrl === imgTrim || isStorageImageUrl(trimmedUrl))) {
-    trimmedUrl = "";
+  if (imgTrim && trimmedUrl) {
+    if (trimmedUrl === imgTrim) {
+      trimmedUrl = "";
+    } else if (!explicitImageClip && isStorageImageUrl(trimmedUrl)) {
+      trimmedUrl = "";
+    }
   }
 
   let finalSource = norm.source.trim();
-  const bodyCaptureTypeEarly =
-    typeof rawBody.capture_type === "string"
-      ? rawBody.capture_type.trim().toLowerCase()
-      : "";
-  const explicitImageClip =
-    bodyCaptureTypeEarly === "screenshot" || bodyCaptureTypeEarly === "image";
-  const explicitUrlClip =
-    bodyCaptureTypeEarly === "url" || bodyCaptureTypeEarly === "link";
 
   const hasUrl = trimmedUrl.length > 0;
   /** URL share (not image-primary): allow ios_share without rewriting to ios_url_share when a preview image exists. */
@@ -96,10 +103,6 @@ export function resolveCaptureInsertFromBody(
   const hasRaw = trimmedRaw.length > 0;
   const hasImage = Boolean(trimmedImage);
 
-  const bodyCaptureType =
-    typeof rawBody.capture_type === "string"
-      ? rawBody.capture_type.trim()
-      : "";
   const allowedTypes: CaptureType[] = ["link", "url", "text", "screenshot"];
 
   const urlPrimaryForType =
@@ -110,7 +113,7 @@ export function resolveCaptureInsertFromBody(
     resolvedType = "url";
   } else if (hasImage) {
     resolvedType =
-      bodyCaptureTypeEarly === "screenshot"
+      bodyCaptureTypeLower === "screenshot"
         ? "screenshot"
         : inferCaptureTypeFromContent(true);
   } else if (hasUrl) {

@@ -268,7 +268,11 @@ export async function runCaptureEnrichment(
 
       const rowUrl = String(row.url ?? "").trim();
       const rowImg = String(row.image_url ?? "").trim();
+      const captureTypeLower = String(row.capture_type ?? "").toLowerCase();
+      const isScreenshotOrImageClip =
+        captureTypeLower === "screenshot" || captureTypeLower === "image";
       if (
+        !isScreenshotOrImageClip &&
         rowImg &&
         rowUrl &&
         (isStorageImageUrl(rowUrl) || rowUrl === rowImg)
