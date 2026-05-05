@@ -963,7 +963,7 @@ export async function enrichCaptureWithOpenAI(
       selectedFunctionName: "enrichNonUrlCaptureWithOpenAI",
     });
     return enrichNonUrlCaptureWithOpenAI(
-      { ...capture, url: null, image_url: img },
+      { ...capture, image_url: img },
       options
     );
   }

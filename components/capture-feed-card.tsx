@@ -155,21 +155,17 @@ export function CaptureFeedCard({ c, onOpenDetail }: Props) {
     Boolean(c.user_note?.trim()) || (hasAi && Boolean(displayRaw?.trim()));
   const hasImage = Boolean(c.image_url);
   const screenshotSourceLink = screenshotSourceLinkFromCapture(c);
-  const captureTypeLower = String(c.capture_type ?? "").trim().toLowerCase();
-  const isScreenshotLike =
-    captureTypeLower === "screenshot" || captureTypeLower === "image";
   const urlTrimForDebug = String(c.url ?? "").trim();
 
   useEffect(() => {
     if (process.env.NODE_ENV !== "development") return;
-    if (!isScreenshotLike || !hasImage) return;
-    console.log("[capture-feed-card] screenshot/image clip url field", {
+    if (!hasImage) return;
+    console.log("[capture-feed-card] image row debug", {
       id: c.id,
       capture_type: c.capture_type,
-      hasUrl: Boolean(urlTrimForDebug),
-      urlLength: urlTrimForDebug.length,
+      url: urlTrimForDebug ? "present" : "missing",
     });
-  }, [c.id, c.capture_type, hasImage, isScreenshotLike, urlTrimForDebug]);
+  }, [c.id, c.capture_type, hasImage, urlTrimForDebug]);
   const interactive = Boolean(onOpenDetail);
   const omitFeedTitle = hasAi && Boolean(c.ai_title?.trim());
 
@@ -210,14 +206,12 @@ export function CaptureFeedCard({ c, onOpenDetail }: Props) {
               </a>
             </p>
           ) : null}
-          {process.env.NODE_ENV === "development" &&
-          isScreenshotLike &&
-          hasImage ? (
+          {process.env.NODE_ENV === "development" && hasImage ? (
             <p
               className={`mt-1 font-mono text-[10px] text-orange-600/90 dark:text-orange-400/90`}
               aria-hidden
             >
-              dev: url={urlTrimForDebug ? "present" : "missing"}
+              {`dev: capture_type=[${String(c.capture_type ?? "")}] url=[${urlTrimForDebug ? "present" : "missing"}]`}
             </p>
           ) : null}
         </div>

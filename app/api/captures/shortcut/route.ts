@@ -283,9 +283,14 @@ export async function POST(request: Request) {
     );
   }
 
-  const { insert, norm, normalizedBody, debugRequested } = computed;
+  let { insert, norm, normalizedBody, debugRequested } = computed;
 
   if (explicitImageClip) {
+    insert = {
+      ...insert,
+      capture_type:
+        bodyCaptureTypeLower === "image" ? "image" : "screenshot",
+    };
     const rawUrl = rawBody.url;
     console.log(`${LOG} screenshot_insert_trace`, {
       body_keys: bodyKeys,
@@ -299,6 +304,7 @@ export async function POST(request: Request) {
       body_capture_type: rawBody.capture_type ?? null,
       insert_url: insert.url,
       insert_capture_type: insert.capture_type,
+      insert_source: insert.source,
     });
   }
 
@@ -350,6 +356,9 @@ export async function POST(request: Request) {
     body_keys: bodyKeys,
     body_capture_type: rawBody.capture_type ?? null,
     has_image_base64_request: hasImageB64Initial,
+    persisted_capture_type: data.capture_type,
+    persisted_url_present: Boolean(String(data.url ?? "").trim()),
+    persisted_image_url_present: Boolean(String(data.image_url ?? "").trim()),
     has_url: Boolean(String(insert.url ?? "").trim()),
     final_capture_type: insert.capture_type,
     final_url: insert.url ? String(insert.url).slice(0, 240) : null,

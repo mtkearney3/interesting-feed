@@ -1,5 +1,11 @@
 import { isStorageImageUrl } from "@/lib/capture-kind";
 
+function bodyCaptureTypeLower(body: Record<string, unknown>): string {
+  return typeof body.capture_type === "string"
+    ? body.capture_type.trim().toLowerCase()
+    : "";
+}
+
 /**
  * Normalizes iPhone Shortcut / bookmarklet payloads into fields for `captures` insert.
  * Does not run enrichment or OpenAI.
@@ -168,6 +174,10 @@ export type ShortcutCaptureNormalized = {
 export function normalizeShortcutCaptureBody(
   body: Record<string, unknown>
 ): ShortcutCaptureNormalized {
+  const ctLower = bodyCaptureTypeLower(body);
+  const explicitImageClip =
+    ctLower === "screenshot" || ctLower === "image";
+
   /** Prefer real http(s) URLs; ignore non-URL strings in `url` so other fields can supply the link. */
   const url = extractUrlFromBody(body).trim();
 
@@ -183,7 +193,8 @@ export function normalizeShortcutCaptureBody(
 
   let source_type = asTrimmedString(body.source_type) || source;
 
-  if (url) {
+  /** Screenshot/image clips may carry a reference URL; keep ios_share (do not treat as URL-primary share). */
+  if (url && !explicitImageClip) {
     const rawSrc =
       asTrimmedString(body.source) || asTrimmedString(body.source_type);
     const s0 = rawSrc.toLowerCase();
@@ -207,11 +218,15 @@ export function normalizeShortcutCaptureBody(
       ? body.user_note.trim()
       : null;
 
-  const capture_type_hint = url
-    ? "url"
-    : typeof body.capture_type === "string"
-      ? body.capture_type
-      : undefined;
+  const capture_type_hint = explicitImageClip
+    ? typeof body.capture_type === "string"
+      ? body.capture_type.trim()
+      : undefined
+    : url
+      ? "url"
+      : typeof body.capture_type === "string"
+        ? body.capture_type
+        : undefined;
 
   return {
     raw_text: rawText,

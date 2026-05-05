@@ -35,7 +35,7 @@ function substantiveRawText(raw: string | null | undefined): boolean {
 }
 
 /** User-uploaded capture image in our Supabase bucket (not og:image / web raster). */
-function isSupabaseUserCaptureImageUrl(url: string): boolean {
+export function isSupabaseUserCaptureImageUrl(url: string): boolean {
   const u = url.trim().toLowerCase();
   if (!u) return false;
   if (u.includes("supabase.co/storage")) return true;

@@ -11,13 +11,24 @@ describe("screenshotSourceLinkFromCapture", () => {
     ).toEqual({ href: "https://www.example.com/path?q=1", label: "example.com" });
   });
 
-  it("returns null for url capture type", () => {
+  it("returns null for url capture type without user storage image", () => {
     expect(
       screenshotSourceLinkFromCapture({
         capture_type: "url",
         url: "https://example.com",
       })
     ).toBeNull();
+  });
+
+  it("shows reference link when url row has user supabase screenshot + article url", () => {
+    expect(
+      screenshotSourceLinkFromCapture({
+        capture_type: "url",
+        url: "https://x.com/foo",
+        image_url:
+          "https://abcdef.supabase.co/storage/v1/object/public/captures/u.png",
+      })
+    ).toEqual({ href: "https://x.com/foo", label: "x.com" });
   });
 
   it("returns null for invalid url", () => {

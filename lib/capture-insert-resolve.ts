@@ -103,7 +103,7 @@ export function resolveCaptureInsertFromBody(
   const hasRaw = trimmedRaw.length > 0;
   const hasImage = Boolean(trimmedImage);
 
-  const allowedTypes: CaptureType[] = ["link", "url", "text", "screenshot"];
+  const allowedTypes: CaptureType[] = ["link", "url", "text", "screenshot", "image"];
 
   const urlPrimaryForType =
     explicitUrlClip || (hasUrl && !explicitImageClip);
@@ -115,7 +115,9 @@ export function resolveCaptureInsertFromBody(
     resolvedType =
       bodyCaptureTypeLower === "screenshot"
         ? "screenshot"
-        : inferCaptureTypeFromContent(true);
+        : bodyCaptureTypeLower === "image"
+          ? "image"
+          : inferCaptureTypeFromContent(true);
   } else if (hasUrl) {
     resolvedType = "url";
   } else {

@@ -2,9 +2,10 @@ import {
   captureRawTextForDisplay,
   captureUrlForDisplay,
   getCaptureKind,
+  isSupabaseUserCaptureImageUrl,
 } from "@/lib/capture-kind";
 
-export const CAPTURE_TYPES = ["text", "link", "url", "screenshot"] as const;
+export const CAPTURE_TYPES = ["text", "link", "url", "screenshot", "image"] as const;
 export type CaptureType = (typeof CAPTURE_TYPES)[number];
 
 export const CAPTURE_STATUSES = [
@@ -49,15 +50,23 @@ export function captureUrlForFeedDisplay(
 }
 
 /**
- * Feed / icon: prefer persisted `capture_type`, then infer from fields.
- * (Do not treat “has url” alone as a link clip — screenshots may carry metadata URLs.)
+ * Feed / icon: prefer persisted `capture_type` (screenshot/image first), then infer.
+ * Rows mis-tagged as `url` but with a user Supabase screenshot still show as screenshot.
  */
 export function feedCaptureTypeDisplay(
   c: Pick<CaptureRow, "url" | "capture_type" | "image_url" | "raw_text">
 ): string {
   const ct = String(c.capture_type ?? "").trim().toLowerCase();
-  if (ct === "url" || ct === "link") return "url";
-  if (ct === "screenshot") return "screenshot";
+  if (ct === "screenshot" || ct === "image") {
+    return ct === "image" ? "image" : "screenshot";
+  }
+  if (ct === "url" || ct === "link") {
+    const imgTrim = String(c.image_url ?? "").trim();
+    if (imgTrim && isSupabaseUserCaptureImageUrl(imgTrim)) {
+      return "screenshot";
+    }
+    return "url";
+  }
   if (ct === "text") return "text";
 
   const urlTrim = String(c.url ?? "").trim();

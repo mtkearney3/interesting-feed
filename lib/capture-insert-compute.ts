@@ -127,6 +127,15 @@ export function computeCaptureInsertFromParsed(
   normalizedUrl = normalizedUrl.trim();
   normalizedRawText = normalizedRawText.trim();
 
+  /** Shortcut / explicit image clips: never downgrade to URL-primary because a reference URL exists. */
+  if (explicitImageClip && hasImage) {
+    finalCaptureType =
+      bodyCaptureTypeLower === "image" ? "image" : "screenshot";
+    if (!isManual && !explicitUrlClip) {
+      finalSource = "ios_share";
+    }
+  }
+
   const debugRequested = rawBody.debug === true;
 
   const normalizedBody = {

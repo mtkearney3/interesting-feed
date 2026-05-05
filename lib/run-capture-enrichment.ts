@@ -287,6 +287,21 @@ export async function runCaptureEnrichment(
         throw new Error(updateError.message);
       }
 
+      const updatedRow = updated as Record<string, unknown> | null;
+      console.log("[enrich] post_update_row_summary", {
+        captureId,
+        capture_type:
+          updatedRow?.capture_type ?? row.capture_type ?? null,
+        url_present: Boolean(
+          String(updatedRow?.url ?? row.url ?? "").trim()
+        ),
+        image_url_present: Boolean(
+          String(updatedRow?.image_url ?? row.image_url ?? "").trim()
+        ),
+        chosen_pipeline: enriched.last_enrichment_pipeline,
+        captureKind: route.kind,
+      });
+
       if (hasArticleUrl) {
         const savedLen =
           typeof enriched.url_article_text === "string"
