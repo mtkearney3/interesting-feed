@@ -20,8 +20,10 @@ import { RabbitHolePageShell } from "@/components/rabbit-hole-page-shell";
 import {
   captureBodyCopySizeClass,
   captureMetadataTextSizeClass,
+  captureScreenshotSourceUrlClass,
   captureSectionLabelSizeClass,
 } from "@/lib/capture-ui";
+import { screenshotSourceLinkFromCapture } from "@/lib/capture-screenshot-source-url";
 import {
   rabbitHoleBlendedHeaderCollapsedChrome,
   rabbitHoleBlendedHeaderExpandedChrome,
@@ -93,6 +95,7 @@ export function CaptureDetailModal({ capture, onClose }: Props) {
   const hasMetaExtra =
     Boolean(c.user_note?.trim()) || (hasAi && Boolean(displayRaw?.trim()));
   const hasImage = Boolean(c.image_url);
+  const screenshotSourceLink = screenshotSourceLinkFromCapture(c);
 
   const headerTitle =
     hasAi && c.ai_title?.trim()
@@ -170,12 +173,26 @@ export function CaptureDetailModal({ capture, onClose }: Props) {
           <div className="mt-3 px-3 pb-4 sm:px-5 sm:pb-6">
             <div className="flex flex-col rounded-2xl border border-zinc-200/80 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 sm:p-5">
               {hasImage ? (
-                <div className="rounded-xl overflow-hidden bg-black shadow-sm dark:shadow-none dark:ring-1 dark:ring-zinc-800">
-                  <img
-                    src={c.image_url!}
-                    alt=""
-                    className="w-full max-h-[85vh] object-contain object-center sm:max-h-[min(85vh,720px)]"
-                  />
+                <div>
+                  <div className="overflow-hidden rounded-xl bg-black shadow-sm dark:shadow-none dark:ring-1 dark:ring-zinc-800">
+                    <img
+                      src={c.image_url!}
+                      alt=""
+                      className="w-full max-h-[85vh] object-contain object-center sm:max-h-[min(85vh,720px)]"
+                    />
+                  </div>
+                  {screenshotSourceLink ? (
+                    <p className="mt-2 min-w-0">
+                      <a
+                        href={screenshotSourceLink.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={captureScreenshotSourceUrlClass}
+                      >
+                        {screenshotSourceLink.label}
+                      </a>
+                    </p>
+                  ) : null}
                 </div>
               ) : null}
 

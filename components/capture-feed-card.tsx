@@ -15,7 +15,9 @@ import {
 import {
   captureBodyCopySizeClass,
   captureMetadataTextSizeClass,
+  captureScreenshotSourceUrlClass,
 } from "@/lib/capture-ui";
+import { screenshotSourceLinkFromCapture } from "@/lib/capture-screenshot-source-url";
 import { CaptureCardLead } from "@/components/capture-card-lead";
 import { useFeedClipStatusOptional } from "@/components/feed-clip-status-context";
 import { StickyClipTitle } from "@/components/capture-sticky-feed-title-dual";
@@ -152,6 +154,7 @@ export function CaptureFeedCard({ c, onOpenDetail }: Props) {
   const hasMetaExtra =
     Boolean(c.user_note?.trim()) || (hasAi && Boolean(displayRaw?.trim()));
   const hasImage = Boolean(c.image_url);
+  const screenshotSourceLink = screenshotSourceLinkFromCapture(c);
   const interactive = Boolean(onOpenDetail);
   const omitFeedTitle = hasAi && Boolean(c.ai_title?.trim());
 
@@ -179,6 +182,19 @@ export function CaptureFeedCard({ c, onOpenDetail }: Props) {
               className="block h-auto w-full max-sm:max-h-[55vh] rounded-xl object-contain object-center sm:max-h-56 sm:object-top"
             />
           </div>
+          {screenshotSourceLink ? (
+            <p className="mt-1.5 min-w-0">
+              <a
+                href={screenshotSourceLink.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={interactive ? stopOpenDetail : undefined}
+                className={captureScreenshotSourceUrlClass}
+              >
+                {screenshotSourceLink.label}
+              </a>
+            </p>
+          ) : null}
         </div>
       ) : null}
 

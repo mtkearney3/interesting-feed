@@ -184,8 +184,10 @@ function parseEnrichmentJson(raw: string): EnrichmentResult {
 const URL_ARTICLE_INSUFFICIENT_USER_MESSAGE =
   "I couldn't extract enough readable article text from this URL to analyze it reliably. The link was saved, but the AI analysis is limited. Please open the article or paste the article text if you want a full analysis.";
 
-const X_TWITTER_INSUFFICIENT_USER_MESSAGE =
-  "Rabbit Hole saved this X post, but X does not expose enough readable text from the link alone. Share a screenshot of the post for full analysis.";
+/** Shown when an X/Twitter link cannot be analyzed from HTML alone (no vision/OG fallback). */
+const X_TWITTER_FALLBACK_USER_MESSAGE =
+  "Rabbit Hole saved this X post link, but X does not provide enough readable text from the link alone. For full analysis, share a screenshot of the post instead.\n\n" +
+  "Tip: screenshot the X post and share the screenshot to Rabbit Hole.";
 
 /** Minimum length for Shortcut/shared text to count as primary input for X posts. */
 const MIN_X_READABLE_RAW_CHARS = 40;
@@ -236,7 +238,7 @@ function insufficientUrlArticleEnrichment(
     extractedTitle.trim() || hostnameFromUrl(fallbackUrl.trim()) || "Saved link";
   const twitter = Boolean(opts?.twitter);
   const userMsg = twitter
-    ? X_TWITTER_INSUFFICIENT_USER_MESSAGE
+    ? X_TWITTER_FALLBACK_USER_MESSAGE
     : URL_ARTICLE_INSUFFICIENT_USER_MESSAGE;
   const notePrefix = twitter ? "[x-twitter]" : "[url-article]";
   const reasonLine = reason ? `${notePrefix} ${reason}` : `${notePrefix} insufficient_extracted_text`;
@@ -1004,6 +1006,7 @@ export async function enrichCaptureWithOpenAI(
     if (
       result.last_enrichment_pipeline ===
         EnrichPipeline.URL_ARTICLE_INSUFFICIENT &&
+      !isTwitterOrXArticleUrl(k.articleUrl.trim()) &&
       fallbackImg &&
       fallbackImg !== k.articleUrl.trim()
     ) {

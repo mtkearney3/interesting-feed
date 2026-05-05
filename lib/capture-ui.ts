@@ -23,3 +23,7 @@ export const captureMetadataTextSizeClass =
 /** Uppercase section headings (Follow-up questions, Your question, Keep going). */
 export const captureSectionLabelSizeClass =
   "text-sm font-semibold uppercase leading-relaxed tracking-wide";
+
+/** Domain link under screenshot images (feed + detail). */
+export const captureScreenshotSourceUrlClass =
+  "text-xs text-zinc-500 underline decoration-zinc-400/25 underline-offset-2 transition-colors hover:text-zinc-700 hover:decoration-zinc-500/45 dark:text-zinc-400 dark:decoration-zinc-500/15 dark:hover:text-zinc-300";
