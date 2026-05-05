@@ -42,6 +42,11 @@ export type CaptureEnrichInput = {
   image_url: string | null;
   /** Reserved for logging / future columns */
   screenshot_url?: string | null;
+  /**
+   * When the URL-article path clears `image_url` for OpenAI, keep the original
+   * preview (e.g. og:image) here for vision fallback if article text is unusable.
+   */
+  fallback_vision_image_url?: string | null;
 };
 
 function clampScore(n: unknown): number {
@@ -445,6 +450,20 @@ export async function enrichUrlClipTextOnly(
     !extracted.ok ||
     extracted.articleText.length < MIN_URL_ARTICLE_CHARS
   ) {
+    const rawAsideForLog = stripStorageUrlsFromRawText(
+      capture.raw_text,
+      null
+    ).trim();
+    console.log("URL_CAPTURE_ENRICH_SUMMARY", {
+      clipId: capture.id ?? null,
+      url: trimmedUrl,
+      extractedArticleTextLength: extracted.articleText.length,
+      primaryInputUsed: "none_insufficient_article_text",
+      usedRawText: substantiveRawText(rawAsideForLog),
+      usedImage: false,
+      imageFallbackUsed: false,
+      pipeline: EnrichPipeline.URL_ARTICLE_INSUFFICIENT,
+    });
     return insufficientUrlArticleEnrichment(
       extracted.title || trimmedUrl,
       trimmedUrl,
@@ -466,6 +485,16 @@ export async function enrichUrlClipTextOnly(
   logUrlArticlePayloadGuardOk(capture.id);
 
   const saverNote = sanitizeSaverNoteForUrlPayload(capture.user_note);
+  const rawAside = stripStorageUrlsFromRawText(capture.raw_text, null).trim();
+  const rawAsideBlock =
+    substantiveRawText(rawAside) && rawAside !== extracted.articleText.trim()
+      ? [
+          "",
+          "Additional context from the saver (not part of the article body):",
+          rawAside,
+        ].join("\n")
+      : "";
+
   const userContent = [
     `URL: ${extracted.finalUrl}`,
     `Title: ${extracted.title}`,
@@ -478,6 +507,7 @@ export async function enrichUrlClipTextOnly(
     "",
     "Saver note (optional context, not part of the article):",
     saverNote,
+    rawAsideBlock,
   ].join("\n");
 
   const system =
@@ -526,6 +556,16 @@ export async function enrichUrlClipTextOnly(
     last_enrichment_pipeline: EnrichPipeline.URL_ARTICLE_TEXT_ONLY,
     url_article_text: extracted.articleText,
   };
+  console.log("URL_CAPTURE_ENRICH_SUMMARY", {
+    clipId: capture.id ?? null,
+    url: trimmedUrl,
+    extractedArticleTextLength: extracted.articleText.length,
+    primaryInputUsed: "url_article_text",
+    usedRawText: Boolean(rawAsideBlock),
+    usedImage: false,
+    imageFallbackUsed: false,
+    pipeline: result.last_enrichment_pipeline,
+  });
   return result;
 }
 
@@ -782,24 +822,59 @@ export async function enrichCaptureWithOpenAI(
         "ENRICH_ROUTER: URL_ARTICLE_TEXT_ONLY requires a non-storage article URL"
       );
     }
+    const fallbackImg = String(
+      capture.fallback_vision_image_url ?? ""
+    ).trim();
+
     console.log("URL_CAPTURE_FINAL_ROUTING", {
       clipId: capture.id ?? "(no-id)",
       hasUrl: true,
       hasImageUrl: false,
+      hasFallbackPreviewImage: Boolean(fallbackImg),
       captureKind: k.kind,
       selectedPipeline: EnrichPipeline.URL_ARTICLE_TEXT_ONLY,
     });
 
-    return enrichUrlClipTextOnly(
-      {
-        ...capture,
+    const articleCapture: CaptureEnrichInput = {
+      ...capture,
+      url: k.articleUrl,
+      image_url: null,
+      screenshot_url: null,
+      capture_type: "url",
+      fallback_vision_image_url: null,
+    };
+
+    let result = await enrichUrlClipTextOnly(articleCapture, options);
+
+    if (
+      result.last_enrichment_pipeline ===
+        EnrichPipeline.URL_ARTICLE_INSUFFICIENT &&
+      fallbackImg &&
+      fallbackImg !== k.articleUrl.trim()
+    ) {
+      result = await enrichNonUrlCaptureWithOpenAI(
+        {
+          ...capture,
+          url: null,
+          image_url: fallbackImg,
+          capture_type: "screenshot",
+          fallback_vision_image_url: null,
+        },
+        options
+      );
+      console.log("URL_CAPTURE_ENRICH_SUMMARY", {
+        clipId: capture.id ?? null,
         url: k.articleUrl,
-        image_url: null,
-        screenshot_url: null,
-        capture_type: "url",
-      },
-      options
-    );
+        extractedArticleTextLength: 0,
+        primaryInputUsed: "image_vision_fallback_after_insufficient_article",
+        usedRawText: false,
+        usedImage: true,
+        imageFallbackUsed: true,
+        pipeline: result.last_enrichment_pipeline,
+      });
+    }
+
+    return result;
   }
 
   console.log("ENRICH_PIPELINE_RUNTIME", {

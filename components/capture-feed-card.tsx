@@ -35,7 +35,7 @@ function FeedKindCaptureIcon({ c }: { c: CaptureRow }) {
   if (raw === "link" || raw === "url") {
     return <Link className={feedMetaIconClass} strokeWidth={2} aria-hidden />;
   }
-  if (raw === "screenshot") {
+  if (raw === "screenshot" || raw === "image") {
     return (
       <ImageIcon className={feedMetaIconClass} strokeWidth={2} aria-hidden />
     );

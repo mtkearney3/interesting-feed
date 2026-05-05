@@ -26,6 +26,8 @@ type CaptureFormProps = {
   openAddClipRequestId?: number;
 };
 
+type ClipType = "text" | "url" | "screenshot" | null;
+
 export function CaptureForm({ openAddClipRequestId = 0 }: CaptureFormProps) {
   const router = useRouter();
   const rawTextRef = useRef("");
@@ -34,12 +36,12 @@ export function CaptureForm({ openAddClipRequestId = 0 }: CaptureFormProps) {
   const [source, setSource] = useState("manual");
   const [userNote, setUserNote] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
+  const [clipType, setClipType] = useState<ClipType>("text");
   const imageInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [showSaved, setShowSaved] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
-  const moreOptionsRef = useRef<HTMLDetailsElement>(null);
   const formRef = useRef<HTMLFormElement | null>(null);
   const addClipPanelRef = useRef<HTMLDivElement | null>(null);
   const scrollAddClipIntoViewAfterOpen = useRef(false);
@@ -57,17 +59,6 @@ export function CaptureForm({ openAddClipRequestId = 0 }: CaptureFormProps) {
     scrollAddClipIntoViewAfterOpen.current = true;
     setFormOpen(true);
   }, [openAddClipRequestId]);
-
-  useEffect(() => {
-    const syncMoreOpen = () => {
-      const el = moreOptionsRef.current;
-      if (!el) return;
-      el.open = window.matchMedia("(min-width: 640px)").matches;
-    };
-    syncMoreOpen();
-    window.addEventListener("resize", syncMoreOpen);
-    return () => window.removeEventListener("resize", syncMoreOpen);
-  }, []);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -116,16 +107,25 @@ export function CaptureForm({ openAddClipRequestId = 0 }: CaptureFormProps) {
     });
   }
 
+  function hasValidInputForMode(): boolean {
+    if (clipType === "text") return rawText.trim().length > 0;
+    if (clipType === "url") return url.trim().length > 0;
+    if (clipType === "screenshot") return Boolean(imageFile);
+    return false;
+  }
+
   function trySubmitClipFromEnter(e: React.KeyboardEvent) {
     if (e.key !== "Enter" || e.shiftKey) return;
     e.preventDefault();
     if (pending) return;
+    if (!hasValidInputForMode()) return;
     formRef.current?.requestSubmit();
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (pending) return;
+    if (!hasValidInputForMode()) return;
     setError(null);
     setShowSaved(false);
     setPending(true);
@@ -237,6 +237,7 @@ export function CaptureForm({ openAddClipRequestId = 0 }: CaptureFormProps) {
       setUrl("");
       setSource("manual");
       setUserNote("");
+      setClipType("text");
       setImageFile(null);
       if (imageInputRef.current) {
         imageInputRef.current.value = "";
@@ -279,10 +280,30 @@ export function CaptureForm({ openAddClipRequestId = 0 }: CaptureFormProps) {
   }
 
   const fieldClass =
-    "mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-sm text-zinc-900 shadow-sm outline-none ring-sky-500/30 placeholder:text-zinc-500 focus:border-sky-400 focus:ring-2 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-sky-600";
+    "w-full min-h-[3rem] rounded-2xl border border-[#263526]/12 bg-[#f3f2ed] px-4 py-3.5 text-base leading-snug text-[#1a221a] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] outline-none placeholder:text-zinc-500/80 transition-[border-color,box-shadow] focus:border-[#d4a017]/45 focus:ring-2 focus:ring-[#d4a017]/25 focus:ring-offset-0 dark:border-white/10 dark:bg-zinc-800/70 dark:text-zinc-100 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] dark:placeholder:text-zinc-500 dark:focus:border-[#d4a017]/50";
 
-  const labelClass =
-    "text-sm font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-400";
+  const panelShellClass =
+    "rounded-[24px] border border-[#263526]/10 bg-[#fafaf8] p-5 shadow-[0_12px_40px_-12px_rgba(38,53,38,0.25)] ring-1 ring-black/[0.04] dark:border-[#2f3e2f]/40 dark:bg-[#161c16] dark:shadow-[0_16px_48px_-16px_rgba(0,0,0,0.55)] dark:ring-white/[0.06] sm:p-6";
+
+  const uploadCardClass =
+    "relative flex min-h-[13rem] cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-[#263526]/18 bg-[#f0efe8]/90 px-4 py-8 text-center transition-colors hover:border-[#d4a017]/35 hover:bg-[#ebe9e1] dark:border-white/15 dark:bg-zinc-800/40 dark:hover:border-[#d4a017]/30 dark:hover:bg-zinc-800/60 sm:min-h-[14rem]";
+
+  const fileInputOverlayClass =
+    "absolute inset-0 z-10 h-full w-full min-h-[13rem] cursor-pointer opacity-0 sm:min-h-[14rem]";
+
+  const segmentWrapClass =
+    "flex w-full rounded-full border border-[#263526]/12 bg-[#e8e6df]/90 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.5)] dark:border-white/10 dark:bg-zinc-800/60 dark:shadow-none";
+
+  const segmentBtnClass =
+    "min-h-[2.75rem] flex-1 rounded-full px-2 py-2 text-sm font-semibold transition-all duration-200 ease-out sm:min-h-0 sm:py-2.5";
+
+  const segmentActiveClass =
+    "bg-[#1a241a] text-white shadow-[0_2px_8px_rgba(26,36,26,0.35)] dark:bg-zinc-100 dark:text-[#1a221a] dark:shadow-md";
+
+  const segmentInactiveClass =
+    "text-zinc-500 hover:bg-white/50 hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700/50 dark:hover:text-zinc-200";
+
+  const saveDisabled = pending || !hasValidInputForMode();
 
   const addClipPanelScroll =
     "scroll-mt-20 sm:scroll-mt-0";
@@ -312,18 +333,24 @@ export function CaptureForm({ openAddClipRequestId = 0 }: CaptureFormProps) {
         ref={addClipPanelRef}
         className={
           formOpen
-            ? `block rounded-xl border border-zinc-200 bg-white p-4 shadow-md dark:border-zinc-800 dark:bg-zinc-900 sm:block sm:rounded-xl sm:border sm:p-5 sm:shadow-sm ${addClipPanelScroll}`
-            : `hidden sm:block sm:rounded-xl sm:border sm:border-zinc-200 sm:bg-white sm:p-5 sm:shadow-sm dark:sm:border-zinc-800 dark:sm:bg-zinc-900 ${addClipPanelScroll}`
+            ? `block sm:block ${panelShellClass} ${addClipPanelScroll}`
+            : `hidden sm:block ${panelShellClass} ${addClipPanelScroll}`
         }
       >
-        <div className="mb-3 flex items-center justify-between sm:mb-4">
-          <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-50 sm:text-lg">
-            New clip
-          </h2>
+        <div className="mb-6 flex items-center justify-between gap-3 sm:mb-7">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span
+              className="h-2 w-2 shrink-0 rounded-full bg-[#d4a017] shadow-[0_0_0_3px_rgba(212,160,23,0.2)]"
+              aria-hidden
+            />
+            <h2 className="truncate text-xl font-bold tracking-tight text-[#1a221a] dark:text-zinc-50 sm:text-2xl">
+              New clip
+            </h2>
+          </div>
           <button
             type="button"
             onClick={() => setFormOpen(false)}
-            className="text-sm font-medium text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 sm:hidden"
+            className="shrink-0 rounded-full border border-[#263526]/12 bg-white/90 px-4 py-2 text-xs font-semibold text-zinc-600 shadow-sm transition hover:border-[#d4a017]/30 hover:bg-[#fffef8] hover:text-[#1a221a] active:scale-[0.97] dark:border-white/10 dark:bg-zinc-800/90 dark:text-zinc-300 dark:hover:border-[#d4a017]/35 dark:hover:bg-zinc-800 sm:hidden"
           >
             Close
           </button>
@@ -333,93 +360,104 @@ export function CaptureForm({ openAddClipRequestId = 0 }: CaptureFormProps) {
           ref={formRef}
           noValidate
           onSubmit={handleSubmit}
-          className="space-y-3 sm:space-y-4"
+          className="space-y-6 sm:space-y-7"
         >
-          <label className="block">
-            <span className={labelClass}>Text</span>
-            <textarea
-              name="raw_text"
-              rows={3}
-              value={rawText}
-              onChange={(e) => setRawText(e.target.value)}
-              onKeyDown={trySubmitClipFromEnter}
-              className={`${fieldClass} min-h-[4.5rem] resize-y font-sans sm:min-h-[6.5rem]`}
-              placeholder="What you saved…"
-            />
-          </label>
-
-          <label className="block">
-            <span className={labelClass}>URL</span>
-            <input
-              name="url"
-              type="url"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              onPaste={handleUrlPaste}
-              onKeyDown={trySubmitClipFromEnter}
-              className={fieldClass}
-              placeholder="Optional — https://…"
-            />
-          </label>
-
-          <label className="block">
-            <span className={labelClass}>Screenshot image</span>
-            <input
-              ref={imageInputRef}
-              name="screenshot"
-              type="file"
-              accept="image/jpeg,image/png,image/webp,image/gif"
-              onChange={(e) =>
-                setImageFile(e.target.files?.item(0) ?? null)
-              }
-              className={`${fieldClass} py-2.5 file:mr-3 file:rounded-md file:border-0 file:bg-zinc-200 file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-zinc-800 dark:file:bg-zinc-700 dark:file:text-zinc-200`}
-            />
-            <p className="mt-1 text-sm leading-normal text-zinc-500 dark:text-zinc-400">
-              JPEG, PNG, WebP, or GIF (max 5MB). Optional unless you are not
-              adding text or a URL.
+          <div className="space-y-2.5">
+            <div
+              className={segmentWrapClass}
+              role="group"
+              aria-label="Clip type"
+            >
+              {(
+                [
+                  { id: "text" as const, label: "Text" },
+                  { id: "url" as const, label: "URL" },
+                  { id: "screenshot" as const, label: "Screenshot" },
+                ] as const
+              ).map(({ id, label }) => {
+                const active = clipType === id;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setClipType(id)}
+                    className={`${segmentBtnClass} ${
+                      active ? segmentActiveClass : segmentInactiveClass
+                    }`}
+                    aria-pressed={active}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="px-0.5 text-center text-xs leading-snug text-zinc-500 dark:text-zinc-400">
+              Choose what you want to add
             </p>
-          </label>
+          </div>
 
-          <p className="text-sm leading-normal text-zinc-500 dark:text-zinc-400">
-            Clip type is set when you save: URL → url, else image →
-            screenshot, else → text.
-          </p>
+          <div className="min-h-[1px]">
+            {clipType === "text" ? (
+              <textarea
+                name="raw_text"
+                rows={4}
+                value={rawText}
+                onChange={(e) => setRawText(e.target.value)}
+                onKeyDown={trySubmitClipFromEnter}
+                className={`${fieldClass} min-h-[7.5rem] resize-y bg-[#fdfcf7] font-sans leading-relaxed sm:min-h-[8rem] dark:bg-[#222a22]/80`}
+                placeholder="Add text for a clip…"
+              />
+            ) : null}
 
-          <div className="rounded-lg border border-zinc-200 dark:border-zinc-700 sm:border-0 sm:p-0">
-            <details ref={moreOptionsRef} className="group">
-              <summary className="cursor-pointer list-none px-1 py-2 text-sm font-semibold text-zinc-600 marker:hidden before:content-none sm:hidden [&::-webkit-details-marker]:hidden">
-                <span className="text-sky-700 dark:text-sky-400">
-                  Source &amp; note
-                </span>
-                <span className="ml-1 font-normal text-zinc-400">(optional)</span>
-              </summary>
-              <div className="space-y-3 border-t border-zinc-100 px-1 pb-1 pt-2 dark:border-zinc-800 sm:border-0 sm:px-0 sm:pb-0 sm:pt-0">
-                <label className="block">
-                  <span className={labelClass}>Source</span>
-                  <input
-                    name="source"
-                    type="text"
-                    required
-                    value={source}
-                    onChange={(e) => setSource(e.target.value)}
-                    className={fieldClass}
-                    placeholder="manual"
-                  />
-                </label>
+            {clipType === "url" ? (
+              <input
+                name="url"
+                type="url"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                onPaste={handleUrlPaste}
+                onKeyDown={trySubmitClipFromEnter}
+                className={fieldClass}
+                placeholder="Paste a link…"
+              />
+            ) : null}
 
-                <label className="block">
-                  <span className={labelClass}>Note</span>
-                  <input
-                    name="user_note"
-                    type="text"
-                    value={userNote}
-                    onChange={(e) => setUserNote(e.target.value)}
-                    className={fieldClass}
-                    placeholder="Optional"
-                  />
-                </label>
+            {clipType === "screenshot" ? (
+              <div className={uploadCardClass}>
+                <input
+                  ref={imageInputRef}
+                  name="screenshot"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  onChange={(e) =>
+                    setImageFile(e.target.files?.item(0) ?? null)
+                  }
+                  className={fileInputOverlayClass}
+                  aria-label="Choose screenshot image"
+                />
+                <div className="pointer-events-none flex flex-col items-center gap-2 px-3">
+                  {imageFile ? (
+                    <>
+                      <span className="max-w-full truncate text-sm font-semibold text-[#1a221a] dark:text-zinc-100">
+                        {imageFile.name}
+                      </span>
+                      <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                        Tap to replace
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-base font-semibold text-[#1a221a] dark:text-zinc-100">
+                        Add screenshot
+                      </span>
+                      <span className="text-sm text-zinc-500 dark:text-zinc-400">
+                        Tap or drop an image
+                      </span>
+                    </>
+                  )}
+                </div>
               </div>
-            </details>
+            ) : null}
           </div>
 
           {error ? (
@@ -428,10 +466,10 @@ export function CaptureForm({ openAddClipRequestId = 0 }: CaptureFormProps) {
             </p>
           ) : null}
 
-          <div className="flex flex-col gap-3 pt-1 sm:flex-row sm:items-center sm:justify-end sm:gap-3 sm:pt-0">
+          <div className="flex flex-col gap-3 pt-2 sm:pt-1">
             {showSaved ? (
               <span
-                className="order-first text-center text-sm font-medium text-emerald-600 dark:text-emerald-400 sm:order-none sm:mr-auto sm:text-left"
+                className="text-center text-sm font-medium text-emerald-600 dark:text-emerald-400 sm:text-left"
                 role="status"
               >
                 Saved
@@ -439,8 +477,8 @@ export function CaptureForm({ openAddClipRequestId = 0 }: CaptureFormProps) {
             ) : null}
             <button
               type="submit"
-              disabled={pending}
-              className="w-full rounded-lg bg-zinc-900 px-4 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 sm:w-auto sm:py-2"
+              disabled={saveDisabled}
+              className="w-full rounded-2xl bg-gradient-to-br from-[#1a241a] via-[#263526] to-[#1f2a1f] px-4 py-4 text-base font-semibold text-white shadow-[0_8px_24px_-6px_rgba(38,53,38,0.55)] ring-1 ring-[#d4a017]/25 transition hover:brightness-110 hover:shadow-[0_10px_28px_-6px_rgba(38,53,38,0.6)] active:scale-[0.99] active:brightness-95 disabled:pointer-events-none disabled:opacity-40 disabled:shadow-none disabled:ring-0 disabled:hover:brightness-100 dark:from-zinc-100 dark:via-zinc-50 dark:to-zinc-200 dark:text-[#1a221a] dark:ring-[#d4a017]/30 dark:hover:brightness-105 dark:disabled:hover:brightness-100"
             >
               {pending ? "Saving…" : "Save clip"}
             </button>

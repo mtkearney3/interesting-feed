@@ -47,6 +47,7 @@ export function computeCaptureInsertFromParsed(
   const R = resolveCaptureInsertFromBody(rawBody);
   const { rawJson, norm, trimmedImage } = R;
   const user_note = norm.user_note;
+  const hasImage = Boolean(trimmedImage);
 
   let normalizedUrl =
     R.trimmedUrl ||
@@ -74,7 +75,16 @@ export function computeCaptureInsertFromParsed(
 
   let finalSource = R.finalSource.trim();
   let finalCaptureType = R.resolvedType;
-  if (normalizedUrl) {
+  const bodyCaptureTypeLower =
+    typeof rawBody.capture_type === "string"
+      ? rawBody.capture_type.trim().toLowerCase()
+      : "";
+  const urlSharePrimary =
+    !hasImage ||
+    bodyCaptureTypeLower === "url" ||
+    bodyCaptureTypeLower === "link";
+
+  if (normalizedUrl && urlSharePrimary) {
     finalCaptureType = "url";
     if (isManual) {
       finalSource = "manual";
@@ -85,7 +95,6 @@ export function computeCaptureInsertFromParsed(
 
   let hasUrl = normalizedUrl.length > 0;
   let hasRawForInsert = normalizedRawText.length > 0;
-  const hasImage = Boolean(trimmedImage);
 
   if (
     /https?:\/\//i.test(rawText) ||
@@ -98,7 +107,7 @@ export function computeCaptureInsertFromParsed(
     if (normalizedUrl && !normalizedRawText.trim()) {
       normalizedRawText = normalizedUrl;
     }
-    if (normalizedUrl) {
+    if (normalizedUrl && urlSharePrimary) {
       finalCaptureType = "url";
       if (isManual) finalSource = "manual";
       else finalSource = "ios_url_share";

@@ -66,7 +66,17 @@ export function resolveCaptureInsertFromBody(
   }
 
   let finalSource = norm.source.trim();
-  if (trimmedUrl) {
+  const bodyCaptureTypeEarly =
+    typeof rawBody.capture_type === "string"
+      ? rawBody.capture_type.trim().toLowerCase()
+      : "";
+  /** URL is the primary payload (not a screenshot clip with an extra context link). */
+  const urlPrimaryForSource =
+    !imgTrim ||
+    bodyCaptureTypeEarly === "url" ||
+    bodyCaptureTypeEarly === "link";
+
+  if (trimmedUrl && urlPrimaryForSource) {
     const rawSrc =
       asTrimmedField(rawBody.source) || asTrimmedField(rawBody.source_type);
     const s0 = rawSrc.toLowerCase();

@@ -220,6 +220,7 @@ export async function runCaptureEnrichment(
     const timer = setTimeout(() => ac.abort(), timeoutMs);
 
     try {
+      const rowImageTrim = String(row.image_url ?? "").trim();
       const enriched = await enrichCaptureWithOpenAI(
         {
           id: row.id,
@@ -232,6 +233,7 @@ export async function runCaptureEnrichment(
           ),
           /** Article URL clips: preview images must not influence OpenAI (UI only). */
           image_url: hasArticleUrl ? null : (row.image_url ?? null),
+          fallback_vision_image_url: hasArticleUrl ? rowImageTrim || null : null,
         },
         { signal: ac.signal }
       );

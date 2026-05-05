@@ -57,6 +57,17 @@ describe("getCaptureKind", () => {
     expect(k.articleUrl).toBe("https://www.cnn.com/2024/example-article");
   });
 
+  it("text clip with article URL + CDN preview without file extension → URL_ARTICLE_TEXT_ONLY", () => {
+    const k = getCaptureKind({
+      capture_type: "text",
+      url: "https://www.theguardian.com/world/2024/example",
+      image_url: "https://assets.guim.co.uk/images/foo-id/master/500",
+      raw_text: "Interesting read",
+    });
+    expect(k.kind).toBe("url");
+    expect(k.pipeline).toBe("URL_ARTICLE_TEXT_ONLY");
+  });
+
   it("manual URL article (link-style) → URL_ARTICLE_TEXT_ONLY", () => {
     const k = getCaptureKind({
       capture_type: "link",

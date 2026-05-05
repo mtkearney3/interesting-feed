@@ -48,13 +48,27 @@ export function captureUrlForFeedDisplay(
   return captureUrlForDisplay(c);
 }
 
-/** Feed badge: link only when there is a real external URL to open. */
+/**
+ * Feed / icon: prefer persisted `capture_type`, then infer from fields.
+ * (Do not treat “has url” alone as a link clip — screenshots may carry metadata URLs.)
+ */
 export function feedCaptureTypeDisplay(
-  c: Pick<CaptureRow, "url" | "capture_type" | "image_url">
+  c: Pick<CaptureRow, "url" | "capture_type" | "image_url" | "raw_text">
 ): string {
-  if (captureUrlForDisplay(c)) return "link";
-  const t = String(c.capture_type ?? "").trim();
-  return t || "—";
+  const ct = String(c.capture_type ?? "").trim().toLowerCase();
+  if (ct === "url" || ct === "link") return "url";
+  if (ct === "screenshot") return "screenshot";
+  if (ct === "text") return "text";
+
+  const urlTrim = String(c.url ?? "").trim();
+  const imgTrim = String(c.image_url ?? "").trim();
+  const rawTrim = String(c.raw_text ?? "").trim();
+
+  if (imgTrim && !urlTrim) return "screenshot";
+  if (urlTrim && captureUrlForDisplay(c)) return "url";
+  if (rawTrim) return "text";
+  if (imgTrim) return "screenshot";
+  return ct || "—";
 }
 
 export function parseFollowupQuestions(value: unknown): string[] {
